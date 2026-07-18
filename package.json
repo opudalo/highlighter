@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "bootstrap:artifacts": "tsx pipeline/bootstrapArtifacts.ts",
+    "backfill:story": "tsx pipeline/backfillStoryLayers.ts",
     "ingest": "tsx pipeline/ingest.ts",
     "validate:artifacts": "tsx pipeline/validateArtifacts.ts",
     "verify:dist": "tsx pipeline/verifyDist.ts",

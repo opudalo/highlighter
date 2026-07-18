@@ -11,6 +11,12 @@ describe('processed artifacts', () => {
     expect(validateArtifact(invalid).issues).toContain('summary-elias-2 depends on future input obs-elias-8.')
   })
 
+  it('rejects a story sentence that depends on a future observation', () => {
+    const invalid = structuredClone(fixtureArtifact)
+    invalid.storySentences[0].inputRecordIds.push('obs-elias-8')
+    expect(validateArtifact(invalid).issues).toContain('story-elias-2 depends on future input obs-elias-8.')
+  })
+
   it('locates explicit character names with exact, non-overlapping offsets', async () => {
     const book = await parseEpub(createTestEpub())
     const mentions = locateMentions(book, fixtureArtifact)

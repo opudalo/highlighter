@@ -38,6 +38,14 @@ export const chunkExtractionSchema = z.object({
     inputRecordIds: z.array(z.string().min(1)),
     ...sourced,
   })),
+  storySentences: z.array(z.object({
+    id: z.string().min(1),
+    characterId: z.string().min(1),
+    sentence: z.string().min(1),
+    inputRecordIds: z.array(z.string().min(1)).min(1),
+    importance: z.enum(['major', 'supporting', 'minor']),
+    ...sourced,
+  })),
 })
 
 export type ChunkExtraction = z.infer<typeof chunkExtractionSchema>
@@ -99,6 +107,17 @@ export const chunkExtractionJsonSchema = object({
       characterId: { type: 'string', minLength: 1 },
       summary: { type: 'string', minLength: 1 },
       inputRecordIds: { type: 'array', items: { type: 'string', minLength: 1 } },
+      ...sourceProperties,
+    }),
+  },
+  storySentences: {
+    type: 'array',
+    items: object({
+      id: { type: 'string', minLength: 1 },
+      characterId: { type: 'string', minLength: 1 },
+      sentence: { type: 'string', minLength: 1 },
+      inputRecordIds: { type: 'array', items: { type: 'string', minLength: 1 } },
+      importance: { type: 'string', enum: ['major', 'supporting', 'minor'] },
       ...sourceProperties,
     }),
   },

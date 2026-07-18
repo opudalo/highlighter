@@ -3,6 +3,11 @@ import { applyArtifactOverrides } from './overrides'
 import { buildChunks, promptFor, restoreCheckpoint } from './ingest'
 import { runExtractionProvider, runProviderChain } from './providers'
 import { fixtureArtifact } from '../src/test/fixtureArtifact'
+import { backfillStoryLayers, buildBoundedOverview } from './backfillStoryLayers'
+
+const emptyExtraction = () => ({
+  entities: [], names: [], observations: [], relationships: [], summaries: [], storySentences: [],
+})
 
 describe('preprocessing pipeline', () => {
   it('packs chapters in forward order without splitting small chapters', () => {
@@ -39,10 +44,8 @@ describe('preprocessing pipeline', () => {
   })
 
   it('validates stub provider output against the common schema', async () => {
-    const result = await runExtractionProvider('stub', 'unused', {
-      entities: [], names: [], observations: [], relationships: [], summaries: [],
-    })
-    expect(result).toEqual({ entities: [], names: [], observations: [], relationships: [], summaries: [] })
+    const result = await runExtractionProvider('stub', 'unused', emptyExtraction())
+    expect(result).toEqual(emptyExtraction())
   })
 
   it('constructs forward-only prompts and restores only matching checkpoints', () => {
@@ -62,15 +65,16 @@ describe('preprocessing pipeline', () => {
       observations: fixtureArtifact.observations.filter((record) => record.sourceSequence <= 5),
       relationships: fixtureArtifact.relationships.filter((record) => record.sourceSequence <= 5),
       summaries: fixtureArtifact.summaries.filter((record) => record.sourceSequence <= 5),
+      storySentences: fixtureArtifact.storySentences.filter((record) => record.sourceSequence <= 5),
     }
     const prompt = promptFor(chunk, artifact)
     expect(prompt).toContain('Only present context.')
     expect(prompt).not.toContain('Elias called the Keeper his father.')
 
-    const extraction = { entities: [], names: [], observations: [], relationships: [], summaries: [] }
-    expect(restoreCheckpoint({ promptVersion: 'forward-only-v1', chunkHash: chunk.hash, extraction }, chunk, artifact)).toEqual(extraction)
+    const extraction = emptyExtraction()
+    expect(restoreCheckpoint({ promptVersion: 'forward-only-story-layers-v2', chunkHash: chunk.hash, extraction }, chunk, artifact)).toEqual(extraction)
     expect(restoreCheckpoint({ promptVersion: 'stale', chunkHash: chunk.hash, extraction }, chunk, artifact)).toBeUndefined()
-    expect(restoreCheckpoint({ promptVersion: 'forward-only-v1', chunkHash: 'stale', extraction }, chunk, artifact)).toBeUndefined()
+    expect(restoreCheckpoint({ promptVersion: 'forward-only-story-layers-v2', chunkHash: 'stale', extraction }, chunk, artifact)).toBeUndefined()
   })
 
   it('moves observations and dependent snapshots to their latest supporting source', () => {
@@ -91,15 +95,21 @@ describe('preprocessing pipeline', () => {
         id: 'summary-supported-later', characterId: 'c-elias', summary: 'The complete fact is now supported.',
         inputRecordIds: ['obs-supported-later'], sourceSequence: 6, sourceBlockId: 'block-6',
       }],
+      storySentences: [{
+        id: 'story-supported-later', characterId: 'c-elias', sentence: 'The complete fact is now supported.',
+        inputRecordIds: ['obs-supported-later'], importance: 'major' as const,
+        sourceSequence: 6, sourceBlockId: 'block-6',
+      }],
     }
-    const restored = restoreCheckpoint({ promptVersion: 'forward-only-v1', chunkHash: chunk.hash, extraction }, chunk, fixtureArtifact)
+    const restored = restoreCheckpoint({ promptVersion: 'forward-only-story-layers-v2', chunkHash: chunk.hash, extraction }, chunk, fixtureArtifact)
     expect(restored?.observations[0]).toMatchObject({ sourceSequence: 7, sourceBlockId: 'block-7' })
     expect(restored?.summaries[0]).toMatchObject({ sourceSequence: 7, sourceBlockId: 'block-7' })
+    expect(restored?.storySentences[0]).toMatchObject({ sourceSequence: 7, sourceBlockId: 'block-7' })
   })
 
   it('retries the primary provider and resumes with the fallback', async () => {
     const attempts: string[] = []
-    const empty = { entities: [], names: [], observations: [], relationships: [], summaries: [] }
+    const empty = emptyExtraction()
     const result = await runProviderChain(
       ['codex', 'claude'],
       'prompt',
@@ -123,5 +133,25 @@ describe('preprocessing pipeline', () => {
     expect(overridden.observations.some((record) => record.id === 'obs-elias-7')).toBe(false)
     expect(overridden.entities.some((entity) => entity.id === 'c-keeper')).toBe(false)
     expect(applyArtifactOverrides(fixtureArtifact, override)).toEqual(overridden)
+  })
+
+  it('backfills append-only story beats and bounded early overviews deterministically', () => {
+    const legacy = {
+      ...fixtureArtifact,
+      schemaVersion: 1 as const,
+      promptVersion: 'legacy-v1',
+      summaries: fixtureArtifact.summaries.filter((record) => record.sourceSequence >= 8),
+      storySentences: undefined,
+    }
+    const upgraded = backfillStoryLayers(legacy)
+    const repeated = backfillStoryLayers(legacy)
+    const early = upgraded.summaries.find((record) => record.sourceSequence === 7)
+
+    expect(upgraded).toEqual(repeated)
+    expect(upgraded.schemaVersion).toBe(2)
+    expect(upgraded.storySentences.map((record) => record.sourceSequence)).toEqual([2, 7, 8])
+    expect(early?.summary).toContain('Elias')
+    expect(early?.inputRecordIds).not.toContain('obs-elias-8')
+    expect(buildBoundedOverview(fixtureArtifact.observations, 'Elias', 12).summary.split(/\s+/u).length).toBeLessThanOrEqual(12)
   })
 })

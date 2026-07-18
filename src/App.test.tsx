@@ -11,13 +11,16 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('Highlighter library', () => {
-  it('offers prepared books and explains the local privacy boundary', () => {
+describe('SPOIL NOT landing page', () => {
+  it('briefly explains the product and offers three trial books', () => {
     render(<App />)
-    expect(screen.getByRole('heading', { name: /Every character/i })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Alice’s Adventures in Wonderland' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Frankenstein' })).toBeInTheDocument()
-    expect(screen.getAllByText(/Books stay on this device/i).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /Ever read a book/i })).toBeInTheDocument()
+    expect(screen.getByText('Yeah, me too.')).toBeInTheDocument()
+    expect(screen.getByText(/page 10 and page 100/i)).toBeInTheDocument()
+    expect(screen.getAllByRole('article')).toHaveLength(3)
+    expect(screen.getByRole('button', { name: 'Read Alice’s Adventures in Wonderland' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Read Frankenstein' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open an EPUB' })).toBeInTheDocument()
   })
 
   it('waits 30 seconds before offering prepared books for an unknown EPUB', async () => {
@@ -35,20 +38,22 @@ describe('Highlighter library', () => {
   })
 })
 
-describe('Highlighter reader', () => {
+describe('SPOIL NOT reader', () => {
   it('opens a real prepared EPUB and exposes keyboard-operable character context', async () => {
     const bytes = await readFile(resolve('public/books/alice.epub'))
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(bytes), { status: 200 })))
     const user = userEvent.setup()
     render(<App />)
     const aliceCard = screen.getByRole('heading', { name: 'Alice’s Adventures in Wonderland' }).closest('article')!
-    await user.click(within(aliceCard).getByRole('button', { name: 'Read now' }))
+    await user.click(within(aliceCard).getByRole('button', { name: 'Read Alice’s Adventures in Wonderland' }))
     await waitFor(() => expect(screen.getByRole('main')).toHaveClass('reader-main'), { timeout: 10_000 })
 
     let nearestSequence = 3
     const rectangle = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       const sequence = Number(this.dataset.sourceSequence)
-      const top = sequence === nearestSequence ? window.innerHeight * 0.34 : 1_000 + (Number.isFinite(sequence) ? sequence : 0)
+      const top = Number.isFinite(sequence)
+        ? window.innerHeight * 0.34 + (sequence - nearestSequence) * 100
+        : 0
       return { x: 0, y: top, top, left: 0, right: 0, bottom: top, width: 0, height: 0, toJSON: () => ({}) }
     })
     fireEvent.scroll(window)
@@ -57,12 +62,26 @@ describe('Highlighter reader', () => {
     fireEvent.scroll(window)
     await waitFor(() => expect(screen.getByLabelText(/safe through paragraph 6/i)).toBeInTheDocument())
 
-    const nameButton = await screen.findByRole('button', { name: /Open Alice character context/i })
+    expect(screen.getByRole('heading', { level: 2, name: 'I' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next chapter' })).not.toBeInTheDocument()
+
+    const nameButton = await screen.findByRole('button', { name: 'Open Alice character context at paragraph 7' })
+    fireEvent.pointerEnter(nameButton, { pointerType: 'mouse' })
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('tooltip')).toBeInTheDocument(), { timeout: 1_000 })
+    expect(within(screen.getByRole('tooltip')).queryByRole('heading')).not.toBeInTheDocument()
+    fireEvent.pointerLeave(nameButton, { pointerType: 'mouse' })
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
     nameButton.focus()
     await user.keyboard('{Enter}')
     const dossier = screen.getByRole('complementary', { name: 'Known up to here character context' })
     expect(within(dossier).getByRole('heading', { name: 'Alice' })).toBeInTheDocument()
+    expect(within(dossier).queryByText('Reader-known character')).not.toBeInTheDocument()
+    expect(within(dossier).queryByText('Spoiler boundary active')).not.toBeInTheDocument()
+    expect(within(dossier).getByText('No timeline moments yet.')).toBeInTheDocument()
     expect(screen.getByLabelText(/safe through paragraph 7/i)).toBeInTheDocument()
+    await user.click(within(dossier).getByRole('tab', { name: 'Story so far' }))
+    expect(within(dossier).getByText(/no story to gather yet/i)).toBeInTheDocument()
     await user.click(within(dossier).getByRole('tab', { name: 'Connections' }))
     expect(within(dossier).getByText(/No reader-known connections/i)).toBeInTheDocument()
     fireEvent.scroll(window)
@@ -70,14 +89,17 @@ describe('Highlighter reader', () => {
     fireEvent.wheel(window)
     fireEvent.scroll(window)
     await waitFor(() => expect(screen.getByLabelText(/safe through paragraph 6/i)).toBeInTheDocument())
-    await user.click(screen.getByRole('button', { name: 'Next chapter' }))
-    await waitFor(() => expect(screen.getByRole('heading', { level: 1, name: 'I' })).toBeInTheDocument())
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView')
+    await user.click(screen.getByRole('button', { name: /Open contents/i }))
+    expect(dossier).not.toHaveClass('open')
+    await user.click(within(screen.getByRole('navigation', { name: 'Chapters' })).getByRole('button', { name: /^I Estimated page/i }))
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' }))
     rectangle.mockRestore()
   }, 20_000)
 
   it('moves focus into the narrow character sheet and closes it with Escape', async () => {
     vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
-      matches: query.includes('max-width: 980px'),
+      matches: query.includes('max-width: 1250px'),
       media: query,
       onchange: null,
       addListener: () => undefined,
@@ -91,8 +113,8 @@ describe('Highlighter reader', () => {
     const user = userEvent.setup()
     render(<App />)
     const aliceCard = screen.getByRole('heading', { name: 'Alice’s Adventures in Wonderland' }).closest('article')!
-    await user.click(within(aliceCard).getByRole('button', { name: 'Read now' }))
-    const nameButton = await screen.findByRole('button', { name: /Open Alice character context/i })
+    await user.click(within(aliceCard).getByRole('button', { name: 'Read Alice’s Adventures in Wonderland' }))
+    const nameButton = await screen.findByRole('button', { name: 'Open Alice character context at paragraph 7' })
     await user.click(nameButton)
     const close = screen.getByRole('button', { name: 'Close character context' })
     const sheet = screen.getByRole('complementary', { name: 'Known up to here character context' })

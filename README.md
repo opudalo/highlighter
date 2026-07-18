@@ -1,6 +1,6 @@
-# Highlighter
+# SPOIL NOT
 
-Highlighter is a local-first, spoiler-safe fiction reader. It parses EPUB files in the browser and reveals character context only from sources at or before the paragraph currently being read.
+SPOIL NOT is a local-first, spoiler-safe fiction reader. It parses EPUB files in the browser and reveals character context only from sources at or before the paragraph currently being read.
 
 ## Demo
 

@@ -18,6 +18,10 @@ const latestDisplayName = (names: NameFact[], characterId: string) => {
     ?? eligible.at(-1)?.name
 }
 
+const nameStoryOpening = (sentence: string, displayName: string) => sentence
+  .replace(/^(He|She|They|It)\b/u, displayName)
+  .replace(/^([^,]{1,80}), (he|she|they|it)\b/u, `$1, ${displayName}`)
+
 export function getSafeCharacterProfile(
   artifact: ProcessedBookArtifact,
   characterId: string,
@@ -28,6 +32,7 @@ export function getSafeCharacterProfile(
   const names = artifact.names.filter((record) => isKnown(record, currentSequence))
   const observations = artifact.observations.filter((record) => isKnown(record, currentSequence))
   const summaries = artifact.summaries.filter((record) => isKnown(record, currentSequence))
+  const storySentences = artifact.storySentences.filter((record) => isKnown(record, currentSequence))
   const relationships = activeRelationships(
     artifact.relationships.filter((record) => isKnown(record, currentSequence)),
   )
@@ -44,6 +49,9 @@ export function getSafeCharacterProfile(
     .filter((record) => record.characterId === characterId)
     .sort((a, b) => a.sourceSequence - b.sourceSequence)
     .at(-1)
+  const characterStorySentences = storySentences
+    .filter((record) => record.characterId === characterId)
+    .sort((a, b) => a.sourceSequence - b.sourceSequence || a.id.localeCompare(b.id))
   const safeRelationships = relationships
     .filter((record) => record.fromCharacterId === characterId || record.toCharacterId === characterId)
     .flatMap((record) => {
@@ -57,6 +65,7 @@ export function getSafeCharacterProfile(
     ...characterNames.map((record) => record.sourceSequence),
     ...characterObservations.map((record) => record.sourceSequence),
     ...safeRelationships.map((record) => record.sourceSequence),
+    ...characterStorySentences.map((record) => record.sourceSequence),
     ...(snapshot ? [snapshot.sourceSequence] : []),
   ]
 
@@ -67,7 +76,12 @@ export function getSafeCharacterProfile(
     aliases: characterNames,
     observations: characterObservations,
     relationships: safeRelationships,
-    summary: snapshot?.summary ?? characterObservations.at(-1)?.summary ?? `${displayName} has just entered the story.`,
+    summary: snapshot?.summary ?? `${displayName} has entered the story.`,
+    summarySnapshot: snapshot,
+    storySentences: characterStorySentences,
+    storySoFar: characterStorySentences
+      .map((record, index) => index === 0 ? nameStoryOpening(record.sentence, displayName) : record.sentence)
+      .join(' '),
     latestSourceSequence: Math.max(...sources),
   }
 }
@@ -127,6 +141,8 @@ export function assertViewWithinBoundary(
     ...profile.aliases,
     ...profile.observations,
     ...profile.relationships,
+    ...(profile.summarySnapshot ? [profile.summarySnapshot] : []),
+    ...profile.storySentences,
     ...graph.nodes,
     ...graph.edges,
   ].every((record) => record.sourceSequence <= currentSequence)

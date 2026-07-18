@@ -21,6 +21,7 @@ describe('spoiler-safe selectors', () => {
     expect(beforeName?.displayName).toBe('Mr Gray')
     expect(JSON.stringify(beforeName)).not.toContain('Elias')
     expect(JSON.stringify(beforeRelationship)).not.toContain('father')
+    expect(beforeRelationship?.storySoFar).not.toContain('father')
     expect(graph.edges).toHaveLength(0)
   })
 
@@ -28,6 +29,8 @@ describe('spoiler-safe selectors', () => {
     expect(getSafeCharacterProfile(fixtureArtifact, 'c-elias', 7)?.displayName).toBe('Elias')
     const atReveal = getSafeCharacterProfile(fixtureArtifact, 'c-elias', 8)
     expect(atReveal?.summary).toContain('Keeper’s son')
+    expect(atReveal?.storySoFar).toContain('identifies the Keeper as his father')
+    expect(atReveal?.storySentences.at(-1)?.sourceSequence).toBe(8)
     expect(atReveal?.relationships).toEqual([expect.objectContaining({ relatedName: 'The Keeper', sourceSequence: 8 })])
   })
 })

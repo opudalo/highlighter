@@ -1,6 +1,6 @@
-# Highlighter
+# SPOIL NOT
 
-Highlighter is a local-first, spoiler-safe EPUB reader. A reader can activate a character name and see only what the source has established at the exact visible paragraph.
+SPOIL NOT is a local-first, spoiler-safe EPUB reader. A reader can activate a character name and see only what the source has established at the exact visible paragraph.
 
 ## Hackathon MVP
 

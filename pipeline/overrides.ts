@@ -8,6 +8,7 @@ export const artifactOverrideSchema = z.object({
   observations: z.array(z.any()).default([]),
   relationships: z.array(z.any()).default([]),
   summaries: z.array(z.any()).default([]),
+  storySentences: z.array(z.any()).default([]),
 })
 
 export type ArtifactOverride = z.infer<typeof artifactOverrideSchema>
@@ -36,7 +37,12 @@ export function applyArtifactOverrides(
     fromCharacterId: characterId(record.fromCharacterId),
     toCharacterId: characterId(record.toCharacterId),
   }))
-  const summaries = keep(artifact.summaries).map((record) => ({ ...record, characterId: characterId(record.characterId) }))
+  const summaries = keep(artifact.summaries)
+    .filter((record) => record.inputRecordIds.every((id) => !suppressed.has(id)))
+    .map((record) => ({ ...record, characterId: characterId(record.characterId) }))
+  const storySentences = keep(artifact.storySentences)
+    .filter((record) => record.inputRecordIds.every((id) => !suppressed.has(id)))
+    .map((record) => ({ ...record, characterId: characterId(record.characterId) }))
 
   return {
     ...artifact,
@@ -47,5 +53,6 @@ export function applyArtifactOverrides(
     observations: replaceOrAppend(observations, overrides.observations),
     relationships: replaceOrAppend(relationships, overrides.relationships),
     summaries: replaceOrAppend(summaries, overrides.summaries),
+    storySentences: replaceOrAppend(storySentences, overrides.storySentences),
   }
 }

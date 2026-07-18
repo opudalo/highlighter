@@ -25,7 +25,7 @@ export type ExtractionChunk = {
   hash: string
 }
 
-const PROMPT_VERSION = 'forward-only-v1'
+const PROMPT_VERSION = 'forward-only-story-layers-v2'
 const TARGET_TOKENS = 12_000
 
 const parseOptions = (args: string[]): CliOptions => {
@@ -93,7 +93,7 @@ const compactState = (artifact: ProcessedBookArtifact) => ({
     id: entity.id,
     names: artifact.names.filter((record) => record.characterId === entity.id).map((record) => record.name),
     latestSummary: artifact.summaries.filter((record) => record.characterId === entity.id).at(-1)?.summary,
-    recentObservations: artifact.observations.filter((record) => record.characterId === entity.id).slice(-4)
+    establishedFacts: artifact.observations.filter((record) => record.characterId === entity.id)
       .map((record) => ({ id: record.id, kind: record.kind, summary: record.summary, sourceSequence: record.sourceSequence })),
   })),
   activeRelationships: artifact.relationships.slice(-80),
@@ -111,8 +111,10 @@ Rules:
 - Summaries and relationship details must be concise paraphrases, never quotations from the source.
 - Each observation must be atomic, supported by its evidenceBlockIds, and cite the block where it becomes knowable.
 - Relationship events are directional but should describe a reader-known connection. Use starts, updates, or ends.
-- Emit an end-of-chunk summary snapshot for every character whose reader-known state materially changes. Set the snapshot source to the final CURRENT BLOCK and list only prior/output record ids actually used.
-- Use deterministic ids such as name-<character>-<sequence>, obs-<character>-<sequence>-<kind>, rel-<from>-<to>-<sequence>, and summary-<character>-<sequence>.
+- For each character and source position with new observations, emit exactly one story sentence. It is an append-only, historically phrased narrative beat of no more than 32 words. It may combine the atomic observations at that exact position, but may not revise an earlier story sentence. Classify its importance as major, supporting, or minor.
+- Emit a rolling summary snapshot whenever a character's useful overview materially changes. Rewrite the prior overview with the new facts while keeping it between 55 and 80 words (never over 85). Prefer durable identity, motivation, condition, and major change; omit minor texture before exceeding the budget. A dropped fact remains in establishedFacts and can return when later relevant.
+- A rolling snapshot must cite the exact source position where it becomes valid, not the end of the chunk, and list only established/output fact ids actually used. Never use a story sentence or earlier snapshot as an opaque input.
+- Use deterministic ids such as name-<character>-<sequence>, obs-<character>-<sequence>-<kind>, rel-<from>-<to>-<sequence>, story-<character>-<sequence>, and summary-<character>-<sequence>.
 - Return only data matching the JSON schema.
 
 PRIOR SAFE STATE:
@@ -122,7 +124,7 @@ CURRENT BLOCKS (${chunk.label}, sequences ${chunk.blocks[0].sourceSequence}-${ch
 ${JSON.stringify(chunk.blocks.map((block) => ({ id: block.id, sourceSequence: block.sourceSequence, chapterId: block.chapterId, text: block.text })))}`
 
 const emptyArtifact = (bookId: BookId, fingerprint: string, sourceBlockCount: number): ProcessedBookArtifact => ({
-  schemaVersion: 1,
+  schemaVersion: 2,
   promptVersion: PROMPT_VERSION,
   bookId,
   fingerprint,
@@ -134,6 +136,7 @@ const emptyArtifact = (bookId: BookId, fingerprint: string, sourceBlockCount: nu
   observations: [],
   relationships: [],
   summaries: [],
+  storySentences: [],
 })
 
 const mergeExtraction = (artifact: ProcessedBookArtifact, extraction: ChunkExtraction): ProcessedBookArtifact => ({
@@ -143,6 +146,7 @@ const mergeExtraction = (artifact: ProcessedBookArtifact, extraction: ChunkExtra
   observations: [...artifact.observations, ...extraction.observations],
   relationships: [...artifact.relationships, ...extraction.relationships],
   summaries: [...artifact.summaries, ...extraction.summaries],
+  storySentences: [...artifact.storySentences, ...extraction.storySentences],
 })
 
 const validateChunk = (chunk: ExtractionChunk, artifact: ProcessedBookArtifact, extraction: ChunkExtraction) => {
@@ -150,12 +154,12 @@ const validateChunk = (chunk: ExtractionChunk, artifact: ProcessedBookArtifact, 
   const blockIds = new Set(chunk.blocks.map((block) => block.id))
   const sequenceByBlock = new Map(chunk.blocks.map((block) => [block.id, block.sourceSequence]))
   const entityIds = new Set([...artifact.entities, ...parsed.entities].map((entity) => entity.id))
-  const records = [...parsed.names, ...parsed.observations, ...parsed.relationships, ...parsed.summaries]
+  const records = [...parsed.names, ...parsed.observations, ...parsed.relationships, ...parsed.summaries, ...parsed.storySentences]
   for (const record of records) {
     if (!blockIds.has(record.sourceBlockId)) throw new Error(`${record.id} cites a block outside the current forward-only chunk.`)
     if (sequenceByBlock.get(record.sourceBlockId) !== record.sourceSequence) throw new Error(`${record.id} has a mismatched source sequence.`)
   }
-  for (const record of [...parsed.names, ...parsed.observations, ...parsed.summaries]) {
+  for (const record of [...parsed.names, ...parsed.observations, ...parsed.summaries, ...parsed.storySentences]) {
     if (!entityIds.has(record.characterId)) throw new Error(`${record.id} references an unknown character.`)
   }
   for (const observation of parsed.observations) {
@@ -175,11 +179,48 @@ const validateChunk = (chunk: ExtractionChunk, artifact: ProcessedBookArtifact, 
   for (const summary of parsed.summaries) {
     for (const inputRecordId of summary.inputRecordIds) {
       const input = inputRecords.get(inputRecordId)
-      if (input && input.sourceSequence > summary.sourceSequence) {
+      if (!input) throw new Error(`${summary.id} references missing input ${inputRecordId}.`)
+      if (input.sourceSequence > summary.sourceSequence) {
         summary.sourceSequence = input.sourceSequence
         summary.sourceBlockId = input.sourceBlockId
       }
     }
+    if (summary.summary.trim().split(/\s+/u).length > 85) {
+      throw new Error(`${summary.id} exceeds the 85-word rolling-summary budget.`)
+    }
+  }
+  const observations = new Map(
+    [...artifact.observations, ...parsed.observations].map((record) => [record.id, record] as const),
+  )
+  for (const sentence of parsed.storySentences) {
+    for (const inputRecordId of sentence.inputRecordIds) {
+      const input = observations.get(inputRecordId)
+      if (!input) throw new Error(`${sentence.id} references missing observation ${inputRecordId}.`)
+      if (input.characterId !== sentence.characterId) {
+        throw new Error(`${sentence.id} references another character's observation ${inputRecordId}.`)
+      }
+      if (!parsed.observations.includes(input)) {
+        throw new Error(`${sentence.id} must describe only observations from its current story beat.`)
+      }
+      if (input.sourceSequence > sentence.sourceSequence) {
+        sentence.sourceSequence = input.sourceSequence
+        sentence.sourceBlockId = input.sourceBlockId
+      }
+    }
+    if (sentence.inputRecordIds.some((id) => observations.get(id)?.sourceSequence !== sentence.sourceSequence)) {
+      throw new Error(`${sentence.id} combines observations from different story beats.`)
+    }
+    if (sentence.sentence.trim().split(/\s+/u).length > 32) {
+      throw new Error(`${sentence.id} exceeds the 32-word story-sentence budget.`)
+    }
+  }
+  const observationBeats = new Set(parsed.observations.map((record) => `${record.characterId}::${record.sourceSequence}`))
+  const storyBeats = parsed.storySentences.map((record) => `${record.characterId}::${record.sourceSequence}`)
+  if (new Set(storyBeats).size !== storyBeats.length) {
+    throw new Error('Each character may have only one story sentence at a source position.')
+  }
+  for (const beat of observationBeats) {
+    if (!storyBeats.includes(beat)) throw new Error(`Missing story sentence for ${beat}.`)
   }
   const blockTextById = new Map(chunk.blocks.map((block) => [block.id, block.text]))
   const chunkPhraseIndex = buildSourcePhraseIndex(chunk.blocks.map((block) => block.text))
@@ -188,9 +229,9 @@ const validateChunk = (chunk: ExtractionChunk, artifact: ProcessedBookArtifact, 
       throw new Error(`${observation.id} contains a long verbatim source phrase.`)
     }
   }
-  for (const record of [...parsed.relationships, ...parsed.summaries]) {
+  for (const record of [...parsed.relationships, ...parsed.summaries, ...parsed.storySentences]) {
     const source = blockTextById.get(record.sourceBlockId)
-    const derived = 'detail' in record ? record.detail : record.summary
+    const derived = 'detail' in record ? record.detail : 'sentence' in record ? record.sentence : record.summary
     if (source && containsIndexedSourcePhrase(derived, chunkPhraseIndex)) {
       throw new Error(`${record.id} contains a long verbatim source phrase.`)
     }

@@ -2,7 +2,7 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { locateMentions, validateArtifact } from '../src/lib/artifact'
 import { parseEpub } from '../src/lib/epub'
-import type { BookId, NameFact, Observation, ProcessedBookArtifact, RelationshipEvent, SummarySnapshot } from '../src/types'
+import type { BookId, NameFact, Observation, ProcessedBookArtifact, RelationshipEvent, StorySentence, SummarySnapshot } from '../src/types'
 
 type SeedCharacter = {
   id: string
@@ -80,6 +80,7 @@ for (const seed of seeds) {
   const names: NameFact[] = []
   const observations: Observation[] = []
   const summaries: SummarySnapshot[] = []
+  const storySentences: StorySentence[] = []
   const relationships: RelationshipEvent[] = []
 
   for (const character of seed.characters) {
@@ -108,6 +109,15 @@ for (const seed of seeds) {
       sourceBlockId: firstName.sourceBlockId,
     }
     observations.push(observation)
+    storySentences.push({
+      id: `story-${character.id}-${firstName.sourceSequence}`,
+      characterId: character.id,
+      sentence: safeIntroduction,
+      inputRecordIds: [observation.id],
+      importance: 'major',
+      sourceSequence: firstName.sourceSequence,
+      sourceBlockId: firstName.sourceBlockId,
+    })
     summaries.push({
       id: `summary-${character.id}-${firstName.sourceSequence}`,
       characterId: character.id,
@@ -134,8 +144,8 @@ for (const seed of seeds) {
   }
 
   const artifact: ProcessedBookArtifact = {
-    schemaVersion: 1,
-    promptVersion: 'bootstrap-reviewed-v1',
+    schemaVersion: 2,
+    promptVersion: 'bootstrap-story-layers-v2',
     bookId: seed.id,
     fingerprint: book.fingerprint,
     generatedAt: '1970-01-01T00:00:00.000Z',
@@ -146,6 +156,7 @@ for (const seed of seeds) {
     observations,
     relationships,
     summaries,
+    storySentences,
   }
   artifact.mentions = locateMentions(book, artifact)
   const validation = validateArtifact(artifact, book)

@@ -42,8 +42,8 @@ export async function writeQaReport(
   const unnamedEntities = artifact.entities.filter((entity) => !artifact.names.some((fact) => fact.characterId === entity.id))
     .map((entity) => `${entity.id}: no source-positioned name fact`)
   const uncertaintyPattern = /\b(?:appears?|apparently|may|might|perhaps|possibly|seems?|unclear|unknown)\b/i
-  const lowConfidence = [...artifact.observations, ...artifact.relationships, ...artifact.summaries]
-    .filter((record) => uncertaintyPattern.test('summary' in record ? record.summary : record.detail))
+  const lowConfidence = [...artifact.observations, ...artifact.relationships, ...artifact.summaries, ...artifact.storySentences]
+    .filter((record) => uncertaintyPattern.test('summary' in record ? record.summary : 'sentence' in record ? record.sentence : record.detail))
     .map((record) => `${record.id} at ¶${record.sourceSequence}`)
   const graphAnomalies: string[] = []
   const knownEntities = new Set(artifact.entities.map((entity) => entity.id))

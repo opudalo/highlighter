@@ -51,8 +51,16 @@ const summarySchema = sourcedRecordSchema.extend({
   inputRecordIds: z.array(z.string().min(1)),
 })
 
+const storySentenceSchema = sourcedRecordSchema.extend({
+  id: z.string().min(1),
+  characterId: z.string().min(1),
+  sentence: z.string().min(1),
+  inputRecordIds: z.array(z.string().min(1)).min(1),
+  importance: z.enum(['major', 'supporting', 'minor']),
+})
+
 export const processedBookArtifactSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.literal(2),
   promptVersion: z.string().min(1),
   bookId: z.string().min(1),
   fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
@@ -64,6 +72,7 @@ export const processedBookArtifactSchema = z.object({
   observations: z.array(observationSchema),
   relationships: z.array(relationshipSchema),
   summaries: z.array(summarySchema),
+  storySentences: z.array(storySentenceSchema),
 })
 
 export type ArtifactValidation = {
@@ -129,6 +138,7 @@ export function validateArtifact(value: unknown, book?: ParsedEpub): ArtifactVal
     ...artifact.observations,
     ...artifact.relationships,
     ...artifact.summaries,
+    ...artifact.storySentences,
   ])) issues.push(`Duplicate sourced record: ${id}`)
 
   const sourcedRecords = [
@@ -137,6 +147,7 @@ export function validateArtifact(value: unknown, book?: ParsedEpub): ArtifactVal
     ...artifact.observations,
     ...artifact.relationships,
     ...artifact.summaries,
+    ...artifact.storySentences,
   ]
   for (const record of sourcedRecords) {
     if (record.sourceSequence > artifact.sourceBlockCount) {
@@ -151,7 +162,7 @@ export function validateArtifact(value: unknown, book?: ParsedEpub): ArtifactVal
     }
   }
 
-  for (const record of [...artifact.names, ...artifact.mentions, ...artifact.observations, ...artifact.summaries]) {
+  for (const record of [...artifact.names, ...artifact.mentions, ...artifact.observations, ...artifact.summaries, ...artifact.storySentences]) {
     if (!entityIds.has(record.characterId)) issues.push(`${record.id} references unknown character ${record.characterId}.`)
   }
   for (const relationship of artifact.relationships) {
@@ -173,9 +184,9 @@ export function validateArtifact(value: unknown, book?: ParsedEpub): ArtifactVal
         issues.push(`${observation.id} contains a long verbatim source phrase.`)
       }
     }
-    for (const record of [...artifact.relationships, ...artifact.summaries]) {
+    for (const record of [...artifact.relationships, ...artifact.summaries, ...artifact.storySentences]) {
       const source = blockMap.get(record.sourceBlockId)
-      const derived = 'detail' in record ? record.detail : record.summary
+      const derived = 'detail' in record ? record.detail : 'sentence' in record ? record.sentence : record.summary
       if (source && containsIndexedSourcePhrase(derived, bookPhraseIndex)) {
         issues.push(`${record.id} contains a long verbatim source phrase.`)
       }
@@ -208,6 +219,21 @@ export function validateArtifact(value: unknown, book?: ParsedEpub): ArtifactVal
       const inputSequence = recordIds.get(inputId)
       if (inputSequence === undefined) issues.push(`${snapshot.id} references missing input ${inputId}.`)
       else if (inputSequence > snapshot.sourceSequence) issues.push(`${snapshot.id} depends on future input ${inputId}.`)
+    }
+  }
+
+  const observationsById = new Map(artifact.observations.map((record) => [record.id, record]))
+  for (const sentence of artifact.storySentences) {
+    for (const inputId of sentence.inputRecordIds) {
+      const input = observationsById.get(inputId)
+      if (!input) issues.push(`${sentence.id} references missing observation ${inputId}.`)
+      else if (input.characterId !== sentence.characterId) {
+        issues.push(`${sentence.id} references another character's observation ${inputId}.`)
+      } else if (input.sourceSequence > sentence.sourceSequence) {
+        issues.push(`${sentence.id} depends on future input ${inputId}.`)
+      } else if (input.sourceSequence !== sentence.sourceSequence) {
+        issues.push(`${sentence.id} combines observations from different story beats.`)
+      }
     }
   }
 

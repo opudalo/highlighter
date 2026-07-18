@@ -1,8 +1,8 @@
 import type { ProcessedBookArtifact } from '../types'
 
 export const fixtureArtifact: ProcessedBookArtifact = {
-  schemaVersion: 1,
-  promptVersion: 'test-v1',
+  schemaVersion: 2,
+  promptVersion: 'test-story-layers-v2',
   bookId: 'fixture',
   fingerprint: 'a'.repeat(64),
   generatedAt: '2026-07-18T00:00:00.000Z',
@@ -29,5 +29,10 @@ export const fixtureArtifact: ProcessedBookArtifact = {
   summaries: [
     { id: 'summary-elias-2', characterId: 'c-elias', summary: 'A guarded man met at the gate.', inputRecordIds: ['obs-elias-2'], sourceSequence: 2, sourceBlockId: 'chapter-1-block-2' },
     { id: 'summary-elias-8', characterId: 'c-elias', summary: 'Elias is revealed as the Keeper’s son.', inputRecordIds: ['obs-elias-2', 'obs-elias-7', 'obs-elias-8', 'rel-elias-keeper-8'], sourceSequence: 8, sourceBlockId: 'chapter-2-block-4' },
+  ],
+  storySentences: [
+    { id: 'story-elias-2', characterId: 'c-elias', sentence: 'A guarded man is met at the gate.', inputRecordIds: ['obs-elias-2'], importance: 'supporting', sourceSequence: 2, sourceBlockId: 'chapter-1-block-2' },
+    { id: 'story-elias-7', characterId: 'c-elias', sentence: 'Mr Gray reveals that his name is Elias.', inputRecordIds: ['obs-elias-7'], importance: 'major', sourceSequence: 7, sourceBlockId: 'chapter-2-block-3' },
+    { id: 'story-elias-8', characterId: 'c-elias', sentence: 'Elias identifies the Keeper as his father.', inputRecordIds: ['obs-elias-8'], importance: 'major', sourceSequence: 8, sourceBlockId: 'chapter-2-block-4' },
   ],
 }

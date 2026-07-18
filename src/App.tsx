@@ -1,23 +1,10 @@
 import {
-  ArrowLeft,
   ArrowRight,
-  BookOpen,
-  Check,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
   CircleAlert,
-  Clock3,
-  FileText,
   Fingerprint,
-  Library,
   LockKeyhole,
-  Menu,
   Network,
-  Quote,
-  ShieldCheck,
-  Sparkles,
-  Upload,
-  UserRound,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
@@ -39,10 +26,12 @@ import type {
   EpubChapter,
   PreparedBook,
   SafeGraph,
+  StorySentence,
 } from './types'
 
 const IMPORT_TIMEOUT_MS = 30_000
 const SUPPORTED_IMPORT_DELAY_MS = 2_800
+const ESTIMATED_WORDS_PER_PAGE = 275
 
 type ImportState = {
   status: 'idle' | 'processing' | 'unsupported' | 'error'
@@ -64,6 +53,14 @@ type ReadingSettings = {
   lineHeight: number
 }
 
+type CharacterPreviewState = {
+  characterId: string
+  sequence: number
+  left: number
+  top: number
+  above: boolean
+}
+
 const DEFAULT_READING_SETTINGS: ReadingSettings = { fontScale: 1, lineHeight: 1.72 }
 
 const uniqueBy = <T,>(values: T[], key: (value: T) => string) => {
@@ -76,27 +73,30 @@ const uniqueBy = <T,>(values: T[], key: (value: T) => string) => {
   })
 }
 
+const closestBlockToMarker = (blocks: HTMLElement[], marker: number) => {
+  let low = 0
+  let high = blocks.length - 1
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2)
+    if (blocks[middle].getBoundingClientRect().top < marker) low = middle + 1
+    else high = middle
+  }
+  const after = blocks[low]
+  const before = blocks[Math.max(0, low - 1)]
+  return Math.abs(before.getBoundingClientRect().top - marker) <= Math.abs(after.getBoundingClientRect().top - marker)
+    ? before
+    : after
+}
+
 function Brand({ onHome }: { onHome?: () => void }) {
   return (
-    <button type="button" className="brand" onClick={onHome} aria-label="Open Highlighter library">
-      <span className="brand-mark" aria-hidden="true"><Fingerprint size={19} /></span>
-      <span>Highlighter</span>
+    <button type="button" className="brand" onClick={onHome} aria-label="Open SPOIL NOT library">
+      <span>SPOIL NOT</span>
     </button>
   )
 }
 
-function BookCover({ book, compact = false }: { book: PreparedBook; compact?: boolean }) {
-  return (
-    <div className={`book-cover tone-${book.coverTone}${compact ? ' compact' : ''}`} aria-hidden="true">
-      <span className="cover-glow" />
-      <span className="cover-sigil">✦</span>
-      <strong>{book.title}</strong>
-      <small>{book.author}</small>
-    </div>
-  )
-}
-
-function BookCard({
+function TrialBook({
   book,
   loading,
   locallyStored,
@@ -112,29 +112,19 @@ function BookCard({
   const isLocalOnly = book.license === 'local-only'
   const canOpen = !isLocalOnly || import.meta.env.DEV || locallyStored
   return (
-    <article className="library-card">
-      <BookCover book={book} />
-      <div className="library-card-copy">
-        <div className="card-meta">
-          <span>{isLocalOnly ? 'Prepared edition' : 'Public domain · CC0'}</span>
-          {isLocalOnly && <LockKeyhole size={13} aria-hidden="true" />}
+    <article className="trial-book">
+      <button
+        type="button"
+        onClick={() => canOpen ? onOpen(book) : onUpload()}
+        disabled={loading}
+        aria-label={canOpen ? `Read ${book.title}` : `Upload your copy of ${book.title}`}
+      >
+        <div>
+          <h2>{book.title}</h2>
+          <p>{book.author}</p>
         </div>
-        <h3>{book.title}</h3>
-        <p className="card-author">{book.author}</p>
-        <p>{book.description}</p>
-        <div className="card-actions">
-          {canOpen ? (
-            <button type="button" className="primary-button" onClick={() => onOpen(book)} disabled={loading}>
-              {loading ? <span className="button-spinner" /> : <BookOpen size={16} aria-hidden="true" />}
-              {loading ? 'Opening…' : locallyStored && isLocalOnly ? 'Continue locally' : 'Read now'}
-            </button>
-          ) : (
-            <button type="button" className="primary-button" onClick={onUpload}>
-              <Upload size={16} aria-hidden="true" /> Upload your copy
-            </button>
-          )}
-        </div>
-      </div>
+        <span>{loading ? 'Opening…' : canOpen ? 'Read' : 'Upload your copy'} <ArrowRight size={16} aria-hidden="true" /></span>
+      </button>
     </article>
   )
 }
@@ -159,81 +149,39 @@ function LibraryScreen({
   const error = importState.status === 'error'
 
   return (
-    <div className="library-screen">
-      <header className="library-topbar">
-        <Brand />
-        <div className="library-top-actions">
-          <span className="local-pill"><ShieldCheck size={14} aria-hidden="true" /> Books stay on this device</span>
-          <button type="button" className="ghost-button" onClick={onUpload}><Upload size={16} aria-hidden="true" /> Import EPUB</button>
-        </div>
-      </header>
+    <div
+      className={`landing-screen${dragging ? ' dragging' : ''}`}
+      onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => { if (event.currentTarget === event.target) setDragging(false) }}
+      onDrop={(event) => {
+        event.preventDefault()
+        setDragging(false)
+        const file = event.dataTransfer.files[0]
+        if (file) onDrop(file)
+      }}
+    >
+      <main className="landing-main">
+        <div className="landing-logo"><Brand /></div>
 
-      <main className="library-main">
-        <section className="library-hero">
-          <div className="hero-copy">
-            <p className="eyebrow"><Sparkles size={14} aria-hidden="true" /> Remember the story, never the spoiler</p>
-            <h1>Every character,<br /><em>known up to here.</em></h1>
-            <p>Read naturally. Tap a name and Highlighter reconstructs only what the book has established at your exact place.</p>
-            <div className="hero-actions">
-              <button type="button" className="primary-button large" onClick={onUpload}><Upload size={17} aria-hidden="true" /> Import your EPUB</button>
-              <a className="text-link" href="#prepared-library">Browse prepared books <ArrowRight size={15} aria-hidden="true" /></a>
-            </div>
-          </div>
-          <div className="hero-demo" aria-label="Example spoiler-safe character context">
-            <div className="demo-page">
-              <span>Sample story · Chapter IV</span>
-              <p>“Wait by the northern gate,” <mark>Mara</mark> said.</p>
-              <p>“The map changes after sunset,” replied the keeper.</p>
-            </div>
-            <div className="demo-dossier">
-              <span className="micro-label">Known up to here</span>
-              <div className="demo-profile"><span>M</span><div><strong>Mara</strong><small>4 known moments</small></div></div>
-              <p>A careful cartographer searching for a route through the northern pass.</p>
-              <div className="demo-safe"><ShieldCheck size={13} /> Future events hidden</div>
-            </div>
-          </div>
-        </section>
-
-        <section
-          className={`drop-zone${dragging ? ' dragging' : ''}`}
-          onDragEnter={(event) => { event.preventDefault(); setDragging(true) }}
-          onDragOver={(event) => event.preventDefault()}
-          onDragLeave={(event) => { if (event.currentTarget === event.target) setDragging(false) }}
-          onDrop={(event) => {
-            event.preventDefault()
-            setDragging(false)
-            const file = event.dataTransfer.files[0]
-            if (file) onDrop(file)
-          }}
-        >
-          <div className="drop-icon"><FileText size={22} aria-hidden="true" /></div>
-          <div><strong>Drop an EPUB to add it to your library</strong><span>Parsed locally · never uploaded · matched by fingerprint</span></div>
-          <button type="button" onClick={onUpload}>Choose file</button>
+        <section className="landing-intro" aria-label="What SPOIL NOT does">
+          <h1>Ever read a book, looked up a character online and spoiled the ending?</h1>
+          <p className="landing-answer">Yeah, me too.</p>
+          <p>SPOIL NOT shows you only what the story has revealed at your exact place. The same character has a different story on page 10 and page 100.</p>
         </section>
 
         {(unsupported || error) && (
-          <section className={`import-result ${unsupported ? 'unsupported' : 'error'}`} role="status">
-            <CircleAlert size={22} aria-hidden="true" />
-            <div>
-              <h2>{unsupported ? 'The machines need a little lie-down.' : 'We could not read that EPUB.'}</h2>
-              <p>{importState.message}</p>
-              {importState.metadata && <span>{importState.metadata}</span>}
-            </div>
-            <button type="button" onClick={onUpload}>Try another</button>
+          <section className="landing-message" role="status">
+            <CircleAlert size={18} aria-hidden="true" />
+            <p>{importState.message}</p>
+            <button type="button" onClick={onUpload}>Try another EPUB</button>
           </section>
         )}
 
-        <section className="prepared-library" id="prepared-library">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow"><Library size={14} aria-hidden="true" /> Prepared library</p>
-              <h2>Start with a book we already know</h2>
-            </div>
-            <p>Each edition has a validated, source-linked character map. Context grows paragraph by paragraph.</p>
-          </div>
-          <div className="book-grid">
+        <section className="landing-trials" aria-label="Trial books">
+          <div className="trial-books">
             {preparedBooks.map((book) => (
-              <BookCard
+              <TrialBook
                 key={book.id}
                 book={book}
                 loading={loadingBookId === book.id}
@@ -243,18 +191,10 @@ function LibraryScreen({
               />
             ))}
           </div>
-        </section>
-
-        <section className="how-it-works">
-          <span className="micro-label">How the boundary holds</span>
-          <div className="steps-grid">
-            <div><span>01</span><h3>Read on your terms</h3><p>Your visible paragraph is the canonical knowledge boundary.</p></div>
-            <div><span>02</span><h3>Open any name</h3><p>Names stay keyboard-friendly and work with a single tap.</p></div>
-            <div><span>03</span><h3>See only the past</h3><p>Every fact is filtered by its source before the dossier is built.</p></div>
-          </div>
+          <button type="button" className="landing-import" onClick={onUpload}>Open an EPUB</button>
         </section>
       </main>
-      <footer className="library-footer"><Brand /><p>Local-first fiction context for curious readers.</p><span>Hackathon edition · no accounts · no tracking</span></footer>
+      {dragging && <div className="landing-drop" aria-hidden="true">Drop your EPUB here</div>}
     </div>
   )
 }
@@ -283,11 +223,15 @@ function MentionedText({
   mentions,
   selectedCharacterId,
   onSelect,
+  onPreview,
+  onPreviewEnd,
 }: {
   block: EpubBlock
   mentions: CharacterMention[]
   selectedCharacterId?: string
   onSelect: (characterId: string, sequence: number) => void
+  onPreview: (characterId: string, sequence: number, target: HTMLElement, immediate?: boolean) => void
+  onPreviewEnd: () => void
 }) {
   if (mentions.length === 0) return <>{block.text}</>
   const parts: React.ReactNode[] = []
@@ -301,7 +245,16 @@ function MentionedText({
         type="button"
         className={`character-mention${selectedCharacterId === mention.characterId ? ' selected' : ''}`}
         key={mention.id}
-        onClick={() => onSelect(mention.characterId, mention.sourceSequence)}
+        onPointerEnter={(event) => {
+          if (event.pointerType !== 'touch') onPreview(mention.characterId, mention.sourceSequence, event.currentTarget)
+        }}
+        onPointerLeave={onPreviewEnd}
+        onFocus={(event) => onPreview(mention.characterId, mention.sourceSequence, event.currentTarget, true)}
+        onBlur={onPreviewEnd}
+        onClick={() => {
+          onPreviewEnd()
+          onSelect(mention.characterId, mention.sourceSequence)
+        }}
         aria-label={`Open ${text} character context at paragraph ${mention.sourceSequence}`}
       >
         {text}
@@ -356,6 +309,23 @@ function RelationshipGraph({ graph }: { graph: SafeGraph }) {
   )
 }
 
+const compactTimeline = (sentences: StorySentence[], limit = 7) => {
+  if (sentences.length <= limit) return sentences
+  const candidates = uniqueBy(
+    [
+      ...sentences.filter((record) => record.importance === 'major'),
+      ...sentences.filter((record) => record.importance === 'supporting').slice(-2),
+      ...sentences.slice(-1),
+    ],
+    (record) => record.id,
+  ).sort((a, b) => a.sourceSequence - b.sourceSequence || a.id.localeCompare(b.id))
+  if (candidates.length <= limit) return candidates
+  return uniqueBy(
+    [...candidates.slice(0, 2), ...candidates.slice(-(limit - 2))],
+    (record) => record.id,
+  ).sort((a, b) => a.sourceSequence - b.sourceSequence || a.id.localeCompare(b.id))
+}
+
 function CharacterDossier({
   opened,
   characterId,
@@ -369,7 +339,9 @@ function CharacterDossier({
   open: boolean
   onClose: () => void
 }) {
-  const [tab, setTab] = useState<'timeline' | 'connections'>('timeline')
+  const [tab, setTab] = useState<'timeline' | 'story' | 'connections'>('timeline')
+  const [showAllMoments, setShowAllMoments] = useState(false)
+  const [isNarrow, setIsNarrow] = useState(() => window.matchMedia('(max-width: 1250px)').matches)
   const panelRef = useRef<HTMLElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
   const returnFocusRef = useRef<HTMLElement>()
@@ -383,7 +355,20 @@ function CharacterDossier({
   )
 
   useEffect(() => {
-    if (!open || !window.matchMedia('(max-width: 980px)').matches) return
+    setTab('timeline')
+    setShowAllMoments(false)
+  }, [characterId])
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 1250px)')
+    const update = () => setIsNarrow(media.matches)
+    update()
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [])
+
+  useEffect(() => {
+    if (!open || !isNarrow) return
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     if (document.activeElement instanceof HTMLElement && !panelRef.current?.contains(document.activeElement)) {
@@ -391,20 +376,20 @@ function CharacterDossier({
     }
     closeRef.current?.focus()
     return () => { document.body.style.overflow = previousOverflow }
-  }, [open, characterId])
+  }, [open, characterId, isNarrow])
 
   const closeAndRestoreFocus = useCallback(() => {
+    if (isNarrow) returnFocusRef.current?.focus()
     onClose()
-    window.requestAnimationFrame(() => returnFocusRef.current?.focus())
-  }, [onClose])
+  }, [isNarrow, onClose])
 
   useEffect(() => {
     const panel = panelRef.current
     if (!panel || !open) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') closeAndRestoreFocus()
-      if (event.key !== 'Tab' || !window.matchMedia('(max-width: 980px)').matches) return
-      const focusable = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')]
+      if (event.key !== 'Tab' || !isNarrow) return
+      const focusable = [...panel.querySelectorAll<HTMLElement>('button:not([disabled]), summary, [href], [tabindex]:not([tabindex="-1"])')]
       if (focusable.length === 0) return
       const first = focusable[0]
       const last = focusable.at(-1)!
@@ -413,106 +398,176 @@ function CharacterDossier({
     }
     panel.addEventListener('keydown', onKeyDown)
     return () => panel.removeEventListener('keydown', onKeyDown)
-  }, [closeAndRestoreFocus, open])
+  }, [closeAndRestoreFocus, isNarrow, open])
+
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel || !open || isNarrow) return
+    const closeFromOutside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !panel.contains(event.target)) closeAndRestoreFocus()
+    }
+    document.addEventListener('pointerdown', closeFromOutside, true)
+    return () => document.removeEventListener('pointerdown', closeFromOutside, true)
+  }, [closeAndRestoreFocus, isNarrow, open])
 
   const aliases = profile ? uniqueBy(profile.aliases, (fact) => fact.name.toLocaleLowerCase()) : []
+  const alternateNames = profile
+    ? aliases.filter((fact) => fact.name.toLocaleLowerCase() !== profile.displayName.toLocaleLowerCase())
+    : []
+  const compactMoments = profile ? compactTimeline(profile.storySentences) : []
+  const visibleMoments = profile && showAllMoments ? profile.storySentences : compactMoments
+  const hiddenMomentCount = profile ? profile.storySentences.length - compactMoments.length : 0
+  const observationsById = new Map(profile?.observations.map((record) => [record.id, record]))
+  const sourceBlocksById = new Map(opened.parsed.blocks.map((block) => [block.id, block]))
+  const panelId = `dossier-panel-${tab}`
+  const tabId = `dossier-tab-${tab}`
 
   return (
     <>
       <div className={`dossier-scrim${open ? ' open' : ''}`} onClick={closeAndRestoreFocus} aria-hidden="true" />
-      <aside ref={panelRef} className={`dossier${open ? ' open' : ''}`} aria-label="Known up to here character context">
-        <div className="dossier-topline">
-          <div><span className="micro-label">Known up to here</span><span><LockKeyhole size={12} aria-hidden="true" /> Through ¶ {currentSequence}</span></div>
-          <button ref={closeRef} type="button" className="dossier-close" onClick={closeAndRestoreFocus} aria-label="Close character context"><X size={18} /></button>
-        </div>
-        {!profile ? (
-          <div className="dossier-welcome">
-            <div><UserRound size={25} aria-hidden="true" /></div>
-            <h2>Select a name in the text</h2>
-            <p>The dossier will contain only details established at this exact paragraph.</p>
-          </div>
-        ) : (
+      <aside
+        ref={panelRef}
+        className={`dossier${open ? ' open' : ''}`}
+        aria-label="Known up to here character context"
+        aria-hidden={!open}
+      >
+        {profile && (
           <>
             <div className="profile-heading">
-              <div className="profile-avatar" aria-hidden="true">{profile.displayName.split(/\s+/).map((part) => part[0]).join('').slice(0, 2)}</div>
-              <div><p><span /> Reader-known character</p><h2>{profile.displayName}</h2></div>
+              <div>
+                <h2>{profile.displayName}</h2>
+                {alternateNames.length > 0 && (
+                  <p>also {alternateNames.map((fact) => `“${fact.name}”`).join(', ')}</p>
+                )}
+              </div>
+              <div className="dossier-controls">
+                <span aria-label={`Context through paragraph ${currentSequence}`}>¶{currentSequence}</span>
+                <button ref={closeRef} type="button" className="dossier-close" onClick={closeAndRestoreFocus} aria-label="Close character context"><X size={17} /></button>
+              </div>
             </div>
             <p className="profile-summary">{profile.summary}</p>
-            <div className="profile-facts">
-              <span><strong>{profile.observations.length}</strong> moments</span>
-              <span><strong>{profile.relationships.length}</strong> connections</span>
-              <span><strong>{aliases.length}</strong> names</span>
-            </div>
             <div className="dossier-tabs" role="tablist" aria-label="Character context sections">
-              <button type="button" role="tab" aria-selected={tab === 'timeline'} onClick={() => setTab('timeline')}><Clock3 size={14} /> Timeline</button>
-              <button type="button" role="tab" aria-selected={tab === 'connections'} onClick={() => setTab('connections')}><Network size={14} /> Connections</button>
+              <button id="dossier-tab-timeline" type="button" role="tab" aria-controls="dossier-panel-timeline" aria-selected={tab === 'timeline'} onClick={() => setTab('timeline')}>Timeline</button>
+              <button id="dossier-tab-story" type="button" role="tab" aria-controls="dossier-panel-story" aria-selected={tab === 'story'} onClick={() => setTab('story')}>Story so far</button>
+              <button id="dossier-tab-connections" type="button" role="tab" aria-controls="dossier-panel-connections" aria-selected={tab === 'connections'} onClick={() => setTab('connections')}>Connections</button>
             </div>
-            <div className="dossier-scroll" aria-live="polite">
+            <div
+              className="dossier-scroll"
+              id={panelId}
+              role="tabpanel"
+              aria-labelledby={tabId}
+            >
               {tab === 'timeline' ? (
-                <>
-                  <section className="dossier-section">
-                    <h3><UserRound size={14} aria-hidden="true" /> Known names</h3>
-                    <div className="alias-list">
-                      {aliases.map((fact) => <span key={fact.id}>{fact.name}<small>¶{fact.sourceSequence}</small></span>)}
-                    </div>
-                  </section>
-                  <section className="dossier-section timeline-section">
-                    <h3><Clock3 size={14} aria-hidden="true" /> Reader-known timeline</h3>
-                    <ol>
-                      {profile.observations.map((observation) => (
-                        <li key={observation.id}>
-                          <span className="timeline-dot" />
-                          <div><span>{observation.kind} · ¶{observation.sourceSequence}</span><p>{observation.summary}</p></div>
-                        </li>
-                      ))}
-                    </ol>
-                  </section>
-                  <section className="dossier-section evidence-section">
-                    <h3><Quote size={14} aria-hidden="true" /> Source on this device</h3>
-                    {uniqueBy(
-                      profile.observations.slice(-3).reverse().flatMap((observation) =>
-                        observation.evidenceBlockIds.flatMap((id) => {
-                          const source = opened.parsed.blocks.find((block) => block.id === id)
-                          return source ? [source] : []
-                        }),
-                      ),
-                      (source) => source.id,
-                    ).slice(0, 3).map((source) => (
-                      <blockquote key={source.id}><p>{source.text}</p><cite>Paragraph {source.sourceSequence}</cite></blockquote>
-                    ))}
-                  </section>
-                </>
+                <section className="dossier-section timeline-section">
+                  <h3 className="visually-hidden">Timeline</h3>
+                  {visibleMoments.length > 0 ? (
+                    <>
+                      <ol>{visibleMoments.map((moment) => {
+                        const rawObservations = moment.inputRecordIds.flatMap((id) => {
+                          const observation = observationsById.get(id)
+                          return observation ? [observation] : []
+                        })
+                        const evidence = uniqueBy(
+                          rawObservations.flatMap((observation) => observation.evidenceBlockIds.flatMap((id) => {
+                            const source = sourceBlocksById.get(id)
+                            return source ? [source] : []
+                          })),
+                          (source) => source.id,
+                        )
+                        return (
+                          <li key={moment.id}>
+                            <details className="timeline-moment">
+                              <summary>
+                                <span>¶{moment.sourceSequence}</span>
+                                <span>{moment.sentence}</span>
+                                <ChevronDown size={14} aria-hidden="true" />
+                              </summary>
+                              <div className="timeline-detail">
+                                {rawObservations.length > 1 && rawObservations.map((observation) => (
+                                  <p key={observation.id}>{observation.summary}</p>
+                                ))}
+                                {evidence.map((source) => (
+                                  <blockquote key={source.id}><p>{source.text}</p><cite>Paragraph {source.sourceSequence}</cite></blockquote>
+                                ))}
+                              </div>
+                            </details>
+                          </li>
+                        )
+                      })}</ol>
+                      {hiddenMomentCount > 0 && (
+                        <button type="button" className="timeline-more" onClick={() => setShowAllMoments((value) => !value)}>
+                          {showAllMoments ? 'Show essential moments' : `Show ${hiddenMomentCount} more moments`}
+                        </button>
+                      )}
+                    </>
+                  ) : <p className="empty-copy">No timeline moments yet.</p>}
+                </section>
+              ) : tab === 'story' ? (
+                <section className="dossier-section story-section">
+                  <h3 className="visually-hidden">Story so far</h3>
+                  {profile.storySoFar
+                    ? <p>{profile.storySoFar}</p>
+                    : <p className="empty-copy">There is no story to gather yet.</p>}
+                </section>
               ) : (
                 <>
                   <section className="dossier-section graph-section">
-                    <h3><Network size={14} aria-hidden="true" /> One-hop graph at ¶{currentSequence}</h3>
+                    <h3 className="visually-hidden">Connections through paragraph {currentSequence}</h3>
                     <RelationshipGraph graph={graph} />
                   </section>
-                  <section className="dossier-section connection-list">
-                    <h3>Established connections</h3>
-                    {profile.relationships.length > 0 ? profile.relationships.map((relationship) => (
-                      <div className="connection-row" key={relationship.id}>
-                        <div>{relationship.relatedName.slice(0, 1)}</div>
-                        <p><strong>{relationship.relatedName}</strong><span>{relationship.label}</span><small>{relationship.detail}</small></p>
-                        <em>¶{relationship.sourceSequence}</em>
-                      </div>
-                    )) : <p className="empty-copy">No connections are established at this point.</p>}
-                  </section>
+                  {profile.relationships.length > 0 && (
+                    <section className="dossier-section connection-list">
+                      <h3>Connection details</h3>
+                      {profile.relationships.map((relationship) => (
+                        <div className="connection-row" key={relationship.id}>
+                          <div>{relationship.relatedName.slice(0, 1)}</div>
+                          <p><strong>{relationship.relatedName}</strong><span>{relationship.label}</span><small>{relationship.detail}</small></p>
+                          <em>¶{relationship.sourceSequence}</em>
+                        </div>
+                      ))}
+                    </section>
+                  )}
                 </>
               )}
             </div>
           </>
         )}
-        <div className="dossier-footer"><ShieldCheck size={15} aria-hidden="true" /><p><strong>Spoiler boundary active</strong><span>Future records were filtered before this view was built.</span></p></div>
       </aside>
     </>
   )
 }
 
+const chapterLocation = (bookTitle: string, chapter: EpubChapter) => {
+  const chapterName = chapter.title.trim()
+  const headingSubtitle = chapter.blocks.find((block) =>
+    block.kind === 'heading'
+      && block.text.trim().toLocaleLowerCase() !== chapterName.toLocaleLowerCase(),
+  )?.text.trim()
+  const structuralChapterName = /^(?:[ivxlcdm]+|chapter|letter|volume|book|part)\b/i.test(chapterName)
+  const shortOpening = structuralChapterName
+    ? chapter.blocks.find((block) => block.kind === 'paragraph' && block.text.trim().length <= 80)?.text.trim()
+    : undefined
+  const subtitle = headingSubtitle ?? shortOpening
+  const section = subtitle ? `${chapterName}. ${subtitle}` : chapterName
+  return `${bookTitle} · ${section}`
+}
+
+const estimateChapterPages = (chapters: EpubChapter[]) => {
+  const pages = new Map<string, number>()
+  let page = 1
+  for (const chapter of chapters) {
+    pages.set(chapter.id, page)
+    const wordCount = chapter.blocks.reduce(
+      (total, block) => total + (block.text.trim().match(/\S+/gu)?.length ?? 0),
+      0,
+    )
+    page += Math.max(1, Math.ceil(wordCount / ESTIMATED_WORDS_PER_PAGE))
+  }
+  return pages
+}
+
 function ReaderScreen({ active, onLibrary }: { active: ActiveReader; onLibrary: () => void }) {
   const { opened, initialSequence, settings } = active
-  const initialChapter = chapterForSequence(opened.parsed, initialSequence)
-  const [chapterId, setChapterId] = useState(initialChapter.id)
   const [currentSequence, setCurrentSequence] = useState(initialSequence)
   const [selectedCharacterId, setSelectedCharacterId] = useState<string | undefined>(() =>
     opened.catalog.artifact.names
@@ -520,9 +575,13 @@ function ReaderScreen({ active, onLibrary }: { active: ActiveReader; onLibrary: 
       .sort((a, b) => b.sourceSequence - a.sourceSequence)[0]?.characterId,
   )
   const [dossierOpen, setDossierOpen] = useState(false)
-  const currentChapter = opened.parsed.chapters.find((chapter) => chapter.id === chapterId) ?? opened.parsed.chapters[0]
+  const [contentsOpen, setContentsOpen] = useState(false)
+  const [preview, setPreview] = useState<CharacterPreviewState>()
+  const currentChapter = chapterForSequence(opened.parsed, currentSequence)
   const readerRef = useRef<HTMLElement>(null)
+  const blockElementsRef = useRef<HTMLElement[]>([])
   const frameRef = useRef<number>()
+  const previewTimerRef = useRef<number>()
   const mentionBoundaryLockRef = useRef(false)
 
   const mentionsByBlock = useMemo(() => {
@@ -534,26 +593,30 @@ function ReaderScreen({ active, onLibrary }: { active: ActiveReader; onLibrary: 
     }
     return map
   }, [opened.catalog.artifact.mentions])
+  const chapterPages = useMemo(
+    () => estimateChapterPages(opened.parsed.chapters),
+    [opened.parsed.chapters],
+  )
 
   const updateFromViewport = useCallback(() => {
     if (mentionBoundaryLockRef.current) return
     if (frameRef.current) cancelAnimationFrame(frameRef.current)
     frameRef.current = requestAnimationFrame(() => {
-      const paragraphs = [...(readerRef.current?.querySelectorAll<HTMLElement>('.reader-block:not(.block-heading)[data-source-sequence]') ?? [])]
-      const blocks = paragraphs.length > 0
-        ? paragraphs
-        : [...(readerRef.current?.querySelectorAll<HTMLElement>('[data-source-sequence]') ?? [])]
+      if (mentionBoundaryLockRef.current) return
+      const blocks = blockElementsRef.current
       if (blocks.length === 0) return
       const marker = window.innerHeight * 0.34
-      const nearest = blocks.reduce((best, element) =>
-        Math.abs(element.getBoundingClientRect().top - marker) < Math.abs(best.getBoundingClientRect().top - marker) ? element : best,
-      )
+      const nearest = closestBlockToMarker(blocks, marker)
       const sequence = Number(nearest.dataset.sourceSequence)
       if (Number.isFinite(sequence)) setCurrentSequence(sequence)
     })
   }, [])
 
   useEffect(() => {
+    const paragraphs = [...(readerRef.current?.querySelectorAll<HTMLElement>('.reader-block:not(.block-heading)[data-source-sequence]') ?? [])]
+    blockElementsRef.current = paragraphs.length > 0
+      ? paragraphs
+      : [...(readerRef.current?.querySelectorAll<HTMLElement>('[data-source-sequence]') ?? [])]
     const releaseMentionBoundary = (event: Event) => {
       if (event instanceof KeyboardEvent && !['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(event.key)) return
       mentionBoundaryLockRef.current = false
@@ -573,21 +636,22 @@ function ReaderScreen({ active, onLibrary }: { active: ActiveReader; onLibrary: 
       window.removeEventListener('pointerdown', releaseMentionBoundary)
       window.removeEventListener('keydown', releaseMentionBoundary)
       if (frameRef.current) cancelAnimationFrame(frameRef.current)
+      blockElementsRef.current = []
     }
-  }, [chapterId, updateFromViewport])
+  }, [updateFromViewport])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void saveReadingProgress({
         bookId: opened.catalog.id,
-        chapterId,
+        chapterId: currentChapter.id,
         currentSequence,
         settings,
         updatedAt: new Date().toISOString(),
       })
     }, 250)
     return () => window.clearTimeout(timer)
-  }, [chapterId, currentSequence, opened.catalog.id, settings])
+  }, [currentChapter.id, currentSequence, opened.catalog.id, settings])
 
   useEffect(() => {
     const target = document.querySelector<HTMLElement>(`[data-source-sequence="${initialSequence}"]`)
@@ -602,17 +666,65 @@ function ReaderScreen({ active, onLibrary }: { active: ActiveReader; onLibrary: 
     setDossierOpen(true)
   }
 
+  const clearCharacterPreview = useCallback(() => {
+    if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current)
+    previewTimerRef.current = undefined
+    setPreview(undefined)
+  }, [])
+
+  const queueCharacterPreview = useCallback((
+    characterId: string,
+    sequence: number,
+    target: HTMLElement,
+    immediate = false,
+  ) => {
+    if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current)
+    const rect = target.getBoundingClientRect()
+    const width = 286
+    const left = Math.min(Math.max(16, rect.left + rect.width / 2 - width / 2), window.innerWidth - width - 16)
+    const above = rect.bottom + 150 > window.innerHeight
+    const top = above ? rect.top - 10 : rect.bottom + 10
+    previewTimerRef.current = window.setTimeout(() => {
+      setPreview({ characterId, sequence, left, top, above })
+      previewTimerRef.current = undefined
+    }, immediate ? 0 : 550)
+  }, [])
+
+  useEffect(() => () => {
+    if (previewTimerRef.current) window.clearTimeout(previewTimerRef.current)
+  }, [])
+
+  useEffect(() => {
+    if (!preview) return
+    window.addEventListener('scroll', clearCharacterPreview, { passive: true })
+    return () => window.removeEventListener('scroll', clearCharacterPreview)
+  }, [clearCharacterPreview, preview])
+
   const goToChapter = (chapter: EpubChapter) => {
     mentionBoundaryLockRef.current = false
-    setChapterId(chapter.id)
+    setContentsOpen(false)
     setCurrentSequence(chapter.firstSequence)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    requestAnimationFrame(() => {
+      document.getElementById(`reader-${chapter.id}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    })
   }
 
-  const chapterIndex = opened.parsed.chapters.findIndex((chapter) => chapter.id === currentChapter.id)
-  const previousChapter = opened.parsed.chapters[chapterIndex - 1]
-  const nextChapter = opened.parsed.chapters[chapterIndex + 1]
   const progress = Math.round((currentSequence / opened.parsed.maxSequence) * 100)
+  const previewProfile = useMemo(
+    () => preview
+      ? getSafeCharacterProfile(opened.catalog.artifact, preview.characterId, preview.sequence)
+      : null,
+    [opened.catalog.artifact, preview],
+  )
+
+  useEffect(() => {
+    if (!contentsOpen) return
+    const closeContents = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setContentsOpen(false)
+    }
+    window.addEventListener('keydown', closeContents)
+    return () => window.removeEventListener('keydown', closeContents)
+  }, [contentsOpen])
 
   return (
     <div
@@ -621,20 +733,29 @@ function ReaderScreen({ active, onLibrary }: { active: ActiveReader; onLibrary: 
     >
       <header className="reader-topbar">
         <Brand onHome={onLibrary} />
-        <div className="reader-title"><span>{opened.parsed.metadata.title}</span><i>/</i><span>{currentChapter.title}</span></div>
-        <div className="reader-actions">
-          <span className="safety-pill" aria-label={`Context is safe through paragraph ${currentSequence}`}><ShieldCheck size={14} /> Safe through ¶ {currentSequence}</span>
-          <button type="button" className="mobile-dossier-button" onClick={() => setDossierOpen(true)} aria-label="Open character context"><Menu size={19} /></button>
-        </div>
+        <button
+          type="button"
+          className="reader-location"
+          aria-label={`Open contents, ${chapterLocation(opened.parsed.metadata.title, currentChapter)}`}
+          aria-expanded={contentsOpen}
+          aria-controls="reader-contents"
+          onClick={() => setContentsOpen((value) => !value)}
+        >
+          <span>{chapterLocation(opened.parsed.metadata.title, currentChapter)}</span>
+          <ChevronDown size={14} aria-hidden="true" />
+        </button>
+        <span className="reader-progress" aria-label={`${progress}% through the book`}>{progress}%</span>
+        <span className="visually-hidden" aria-live="polite" aria-label={`Context is safe through paragraph ${currentSequence}`}>Context is safe through paragraph {currentSequence}</span>
       </header>
 
-      <aside className="chapter-rail" aria-label="Book navigation">
-        <button type="button" className="back-library" onClick={onLibrary}><ArrowLeft size={14} /> Library</button>
-        <BookCover book={opened.catalog} compact />
-        <div className="rail-title"><span className="micro-label">Reading now</span><h2>{opened.parsed.metadata.title}</h2><p>{opened.parsed.metadata.author}</p></div>
-        <nav className="chapter-list" aria-label="Chapters">
-          <span className="micro-label">Contents</span>
-          {opened.parsed.chapters.map((chapter, index) => (
+      {contentsOpen && <button type="button" className="contents-scrim" aria-label="Close contents" onClick={() => setContentsOpen(false)} />}
+      <nav id="reader-contents" className={`reader-contents${contentsOpen ? ' open' : ''}`} aria-label="Chapters" aria-hidden={!contentsOpen}>
+        <div className="contents-heading">
+          <span>{opened.parsed.metadata.title}</span>
+          <button type="button" onClick={() => setContentsOpen(false)} aria-label="Close contents"><X size={16} /></button>
+        </div>
+        <div className="contents-list">
+          {opened.parsed.chapters.map((chapter) => (
             <button
               type="button"
               key={chapter.id}
@@ -642,38 +763,55 @@ function ReaderScreen({ active, onLibrary }: { active: ActiveReader; onLibrary: 
               aria-current={chapter.id === currentChapter.id ? 'page' : undefined}
               onClick={() => goToChapter(chapter)}
             >
-              <span>{String(index + 1).padStart(2, '0')}</span><strong>{chapter.title}</strong><ChevronRight size={14} />
+              <strong>{chapter.title}</strong>
+              <span className="contents-page" aria-label={`Estimated page ${chapterPages.get(chapter.id) ?? 1}`}>{chapterPages.get(chapter.id) ?? 1}</span>
             </button>
           ))}
-        </nav>
-        <div className="rail-progress"><div><span className="micro-label">Book progress</span><strong>{progress}%</strong></div><span><i style={{ width: `${progress}%` }} /></span><small>¶ {currentSequence} of {opened.parsed.maxSequence}</small></div>
-      </aside>
+        </div>
+      </nav>
 
       <main ref={readerRef} className="reader-main" id="reader">
-        <div className="reading-marker" aria-hidden="true"><span>Reading here</span></div>
-        <header className="chapter-heading"><span>Section {chapterIndex + 1}</span><h1>{currentChapter.title}</h1><div>✦</div></header>
-        <div className="chapter-body">
-          {currentChapter.blocks.map((block) => {
-            const current = block.sourceSequence === currentSequence
-            if (block.kind === 'heading') {
-              return <h2 key={block.id} id={block.id} className={`reader-block block-heading${current ? ' current' : ''}`} data-source-sequence={block.sourceSequence}>{block.text}</h2>
-            }
-            return (
-              <div key={block.id} id={block.id} className={`reader-block${current ? ' current' : ''}`} data-source-sequence={block.sourceSequence}>
-                <span className="paragraph-number" aria-hidden="true">{block.sourceSequence}</span>
-                <p><MentionedText block={block} mentions={mentionsByBlock.get(block.id) ?? []} selectedCharacterId={selectedCharacterId} onSelect={selectCharacter} /></p>
-              </div>
-            )
-          })}
-        </div>
-        <nav className="chapter-pager" aria-label="Adjacent chapters">
-          {previousChapter ? <button type="button" onClick={() => goToChapter(previousChapter)}><ChevronLeft size={16} /><span>Previous<strong>{previousChapter.title}</strong></span></button> : <span />}
-          {nextChapter ? <button type="button" onClick={() => goToChapter(nextChapter)}><span>Next<strong>{nextChapter.title}</strong></span><ChevronRight size={16} /></button> : <span />}
-        </nav>
+        <h1 className="visually-hidden">{opened.parsed.metadata.title}</h1>
+        {opened.parsed.chapters.map((chapter) => (
+          <section
+            className="reader-chapter"
+            id={`reader-${chapter.id}`}
+            key={chapter.id}
+            aria-labelledby={`reader-${chapter.id}-title`}
+          >
+            <header className="chapter-heading">
+              <h2 id={`reader-${chapter.id}-title`}>{chapter.title}</h2>
+            </header>
+            <div className="chapter-body">
+              {chapter.blocks.map((block) => {
+                const current = block.sourceSequence === currentSequence
+                if (block.kind === 'heading') {
+                  if (block.text.trim().toLocaleLowerCase() === chapter.title.trim().toLocaleLowerCase()) return null
+                  return <h3 key={block.id} id={block.id} className={`reader-block block-heading${current ? ' current' : ''}`} data-source-sequence={block.sourceSequence}>{block.text}</h3>
+                }
+                return (
+                  <div key={block.id} id={block.id} className={`reader-block${current ? ' current' : ''}`} data-source-sequence={block.sourceSequence}>
+                    <span className="paragraph-number" aria-hidden="true">{block.sourceSequence}</span>
+                    <p><MentionedText block={block} mentions={mentionsByBlock.get(block.id) ?? []} selectedCharacterId={dossierOpen ? selectedCharacterId : undefined} onSelect={selectCharacter} onPreview={queueCharacterPreview} onPreviewEnd={clearCharacterPreview} /></p>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        ))}
       </main>
 
+      {preview && previewProfile && (
+        <div
+          className={`character-preview${preview.above ? ' above' : ''}`}
+          role="tooltip"
+          style={{ left: preview.left, top: preview.top }}
+        >
+          <p>{previewProfile.summary}</p>
+        </div>
+      )}
+
       <CharacterDossier opened={opened} characterId={selectedCharacterId} currentSequence={currentSequence} open={dossierOpen} onClose={() => setDossierOpen(false)} />
-      <div className="floating-position"><button type="button" disabled={!previousChapter} onClick={() => previousChapter && goToChapter(previousChapter)} aria-label="Previous chapter"><ChevronLeft size={16} /></button><span><strong>¶ {currentSequence}</strong> · {progress}%</span><button type="button" disabled={!nextChapter} onClick={() => nextChapter && goToChapter(nextChapter)} aria-label="Next chapter"><ChevronRight size={16} /></button></div>
     </div>
   )
 }

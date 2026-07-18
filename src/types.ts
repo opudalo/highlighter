@@ -96,8 +96,16 @@ export type SummarySnapshot = SourcedRecord & {
   inputRecordIds: string[]
 }
 
+export type StorySentence = SourcedRecord & {
+  id: string
+  characterId: string
+  sentence: string
+  inputRecordIds: string[]
+  importance: 'major' | 'supporting' | 'minor'
+}
+
 export type ProcessedBookArtifact = {
-  schemaVersion: 1
+  schemaVersion: 2
   promptVersion: string
   bookId: BookId
   fingerprint: string
@@ -109,6 +117,7 @@ export type ProcessedBookArtifact = {
   observations: Observation[]
   relationships: RelationshipEvent[]
   summaries: SummarySnapshot[]
+  storySentences: StorySentence[]
 }
 
 export type PreparedBook = {
@@ -136,6 +145,9 @@ export type SafeCharacterProfile = {
   observations: Observation[]
   relationships: SafeRelationship[]
   summary: string
+  summarySnapshot?: SummarySnapshot
+  storySentences: StorySentence[]
+  storySoFar: string
   latestSourceSequence: number
 }
 
