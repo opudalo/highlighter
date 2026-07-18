@@ -2,9 +2,6 @@ node_modules/
 dist/
 *.tsbuildinfo
 
-# Local-only copyrighted EPUB. It may be served by the dev server, but it must
-# never enter source control or a production Pages build.
-public/books/neuromancer.epub
 
 # Private ingestion inputs, checkpoints, source excerpts, and QA output.
 .highlighter-work/
