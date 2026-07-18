@@ -79,11 +79,11 @@ describe('SPOIL NOT reader', () => {
     expect(within(dossier).queryByText('Reader-known character')).not.toBeInTheDocument()
     expect(within(dossier).queryByText('Spoiler boundary active')).not.toBeInTheDocument()
     expect(within(dossier).getByText('No timeline moments yet.')).toBeInTheDocument()
+    expect(within(dossier).queryByRole('tab', { name: 'Story so far' })).not.toBeInTheDocument()
+    expect(within(dossier).queryByText(/^¶/)).not.toBeInTheDocument()
     expect(screen.getByLabelText(/safe through paragraph 7/i)).toBeInTheDocument()
-    await user.click(within(dossier).getByRole('tab', { name: 'Story so far' }))
-    expect(within(dossier).getByText(/no story to gather yet/i)).toBeInTheDocument()
     await user.click(within(dossier).getByRole('tab', { name: 'Connections' }))
-    expect(within(dossier).getByText(/No reader-known connections/i)).toBeInTheDocument()
+    expect(within(dossier).getByText(/No connections yet/i)).toBeInTheDocument()
     fireEvent.scroll(window)
     expect(screen.getByLabelText(/safe through paragraph 7/i)).toBeInTheDocument()
     fireEvent.wheel(window)
@@ -95,6 +95,31 @@ describe('SPOIL NOT reader', () => {
     await user.click(within(screen.getByRole('navigation', { name: 'Chapters' })).getByRole('button', { name: /^I Estimated page/i }))
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start', behavior: 'smooth' }))
     rectangle.mockRestore()
+  }, 20_000)
+
+  it('opens full context inline and navigates through clickable connections', async () => {
+    const bytes = await readFile(resolve('public/books/alice.epub'))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(bytes), { status: 200 })))
+    const user = userEvent.setup()
+    render(<App />)
+    const aliceCard = screen.getByRole('heading', { name: 'Alice’s Adventures in Wonderland' }).closest('article')!
+    await user.click(within(aliceCard).getByRole('button', { name: 'Read Alice’s Adventures in Wonderland' }))
+    const aliceMentions = await screen.findAllByRole('button', { name: 'Open Alice character context at paragraph 12' })
+    await user.click(aliceMentions[0])
+
+    const dossier = screen.getByRole('complementary', { name: 'Known up to here character context' })
+    await user.click(within(dossier).getByRole('button', { name: 'Read full context' }))
+    const fullContext = dossier.querySelector<HTMLElement>('.full-context-section')!
+    expect(within(fullContext).getByText(/Alice sees little value in books without pictures/i)).toBeInTheDocument()
+    expect(within(dossier).queryByRole('tab', { name: 'Timeline' })).not.toBeInTheDocument()
+    await user.click(within(dossier).getByRole('button', { name: 'Back to summary' }))
+
+    await user.click(within(dossier).getByRole('tab', { name: 'Connections' }))
+    const whiteRabbit = within(dossier).getByRole('button', { name: /White Rabbit/i })
+    await user.click(whiteRabbit)
+    await waitFor(() => expect(within(dossier).getByRole('heading', { name: 'Rabbit' })).toBeInTheDocument())
+    expect(within(dossier).getByText(/also “White Rabbit”/i)).toBeInTheDocument()
+    expect(within(dossier).getByRole('tab', { name: 'Timeline' })).toHaveAttribute('aria-selected', 'true')
   }, 20_000)
 
   it('moves focus into the narrow character sheet and closes it with Escape', async () => {

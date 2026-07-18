@@ -4,7 +4,6 @@ import {
   CircleAlert,
   Fingerprint,
   LockKeyhole,
-  Network,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
@@ -18,14 +17,13 @@ import {
   saveImportedBook,
   saveReadingProgress,
 } from './lib/libraryDb'
-import { getSafeCharacterProfile, getSafeGraph } from './lib/spoilerSafe'
+import { getSafeCharacterProfile } from './lib/spoilerSafe'
 import type {
   BookId,
   CharacterMention,
   EpubBlock,
   EpubChapter,
   PreparedBook,
-  SafeGraph,
   StorySentence,
 } from './types'
 
@@ -266,49 +264,6 @@ function MentionedText({
   return <>{parts}</>
 }
 
-function RelationshipGraph({ graph }: { graph: SafeGraph }) {
-  const width = 360
-  const height = 260
-  const center = { x: width / 2, y: height / 2 }
-  const selected = graph.nodes.find((node) => node.selected)
-  const neighbors = graph.nodes.filter((node) => !node.selected).sort((a, b) => a.label.localeCompare(b.label))
-  const positions = new Map<string, { x: number; y: number }>()
-  if (selected) positions.set(selected.id, center)
-  neighbors.forEach((node, index) => {
-    const angle = -Math.PI / 2 + (index * Math.PI * 2) / Math.max(neighbors.length, 1)
-    positions.set(node.id, { x: center.x + Math.cos(angle) * 103, y: center.y + Math.sin(angle) * 86 })
-  })
-
-  if (!selected || graph.edges.length === 0) {
-    return <div className="graph-empty"><Network size={24} aria-hidden="true" /><p>No reader-known connections at this paragraph.</p></div>
-  }
-
-  return (
-    <svg className="relationship-graph" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Relationship graph for ${selected.label}`}>
-      <g className="graph-edges">
-        {graph.edges.map((edge) => {
-          const from = positions.get(edge.from)
-          const to = positions.get(edge.to)
-          if (!from || !to) return null
-          return <line key={edge.id} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />
-        })}
-      </g>
-      {graph.nodes.map((node) => {
-        const position = positions.get(node.id)
-        if (!position) return null
-        const initials = node.label.split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()
-        return (
-          <g className={`graph-node${node.selected ? ' selected' : ''}`} key={node.id} transform={`translate(${position.x} ${position.y})`}>
-            <circle r={node.selected ? 35 : 29} />
-            <text className="graph-initials" textAnchor="middle" dy="5">{initials}</text>
-            <text className="graph-label" textAnchor="middle" y={node.selected ? 54 : 47}>{node.label}</text>
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
-
 const compactTimeline = (sentences: StorySentence[], limit = 7) => {
   if (sentences.length <= limit) return sentences
   const candidates = uniqueBy(
@@ -332,31 +287,31 @@ function CharacterDossier({
   currentSequence,
   open,
   onClose,
+  onSelectCharacter,
 }: {
   opened: OpenedBook
   characterId?: string
   currentSequence: number
   open: boolean
   onClose: () => void
+  onSelectCharacter: (characterId: string) => void
 }) {
-  const [tab, setTab] = useState<'timeline' | 'story' | 'connections'>('timeline')
+  const [tab, setTab] = useState<'timeline' | 'connections'>('timeline')
   const [showAllMoments, setShowAllMoments] = useState(false)
+  const [showFullContext, setShowFullContext] = useState(false)
   const [isNarrow, setIsNarrow] = useState(() => window.matchMedia('(max-width: 1250px)').matches)
   const panelRef = useRef<HTMLElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
   const returnFocusRef = useRef<HTMLElement>()
   const profile = useMemo(
     () => characterId ? getSafeCharacterProfile(opened.catalog.artifact, characterId, currentSequence) : null,
     [characterId, currentSequence, opened.catalog.artifact],
   )
-  const graph = useMemo(
-    () => characterId ? getSafeGraph(opened.catalog.artifact, characterId, currentSequence) : { nodes: [], edges: [] },
-    [characterId, currentSequence, opened.catalog.artifact],
-  )
-
   useEffect(() => {
     setTab('timeline')
     setShowAllMoments(false)
+    setShowFullContext(false)
   }, [characterId])
 
   useEffect(() => {
@@ -417,10 +372,21 @@ function CharacterDossier({
   const compactMoments = profile ? compactTimeline(profile.storySentences) : []
   const visibleMoments = profile && showAllMoments ? profile.storySentences : compactMoments
   const hiddenMomentCount = profile ? profile.storySentences.length - compactMoments.length : 0
-  const observationsById = new Map(profile?.observations.map((record) => [record.id, record]))
-  const sourceBlocksById = new Map(opened.parsed.blocks.map((block) => [block.id, block]))
   const panelId = `dossier-panel-${tab}`
   const tabId = `dossier-tab-${tab}`
+  const hasFullContext = Boolean(profile?.storySoFar && profile.storySoFar !== profile.summary)
+
+  useEffect(() => {
+    if (!hasFullContext) setShowFullContext(false)
+  }, [hasFullContext])
+
+  const selectConnection = (relatedCharacterId: string) => {
+    setTab('timeline')
+    setShowAllMoments(false)
+    setShowFullContext(false)
+    onSelectCharacter(relatedCharacterId)
+    requestAnimationFrame(() => headingRef.current?.focus())
+  }
 
   return (
     <>
@@ -435,101 +401,67 @@ function CharacterDossier({
           <>
             <div className="profile-heading">
               <div>
-                <h2>{profile.displayName}</h2>
+                <h2 ref={headingRef} tabIndex={-1}>{profile.displayName}</h2>
                 {alternateNames.length > 0 && (
                   <p>also {alternateNames.map((fact) => `“${fact.name}”`).join(', ')}</p>
                 )}
               </div>
-              <div className="dossier-controls">
-                <span aria-label={`Context through paragraph ${currentSequence}`}>¶{currentSequence}</span>
-                <button ref={closeRef} type="button" className="dossier-close" onClick={closeAndRestoreFocus} aria-label="Close character context"><X size={17} /></button>
+              <button ref={closeRef} type="button" className="dossier-close" onClick={closeAndRestoreFocus} aria-label="Close character context"><X size={17} /></button>
+            </div>
+            <p className="profile-summary">
+              {profile.summary}
+              {hasFullContext && (
+                <> <button type="button" onClick={() => setShowFullContext((value) => !value)}>{showFullContext ? 'Back to summary' : 'Read full context'}</button></>
+              )}
+            </p>
+            {showFullContext ? (
+              <div className="dossier-scroll full-context-scroll">
+                <section className="dossier-section full-context-section">
+                  <p>{profile.storySoFar}</p>
+                </section>
               </div>
-            </div>
-            <p className="profile-summary">{profile.summary}</p>
-            <div className="dossier-tabs" role="tablist" aria-label="Character context sections">
-              <button id="dossier-tab-timeline" type="button" role="tab" aria-controls="dossier-panel-timeline" aria-selected={tab === 'timeline'} onClick={() => setTab('timeline')}>Timeline</button>
-              <button id="dossier-tab-story" type="button" role="tab" aria-controls="dossier-panel-story" aria-selected={tab === 'story'} onClick={() => setTab('story')}>Story so far</button>
-              <button id="dossier-tab-connections" type="button" role="tab" aria-controls="dossier-panel-connections" aria-selected={tab === 'connections'} onClick={() => setTab('connections')}>Connections</button>
-            </div>
-            <div
-              className="dossier-scroll"
-              id={panelId}
-              role="tabpanel"
-              aria-labelledby={tabId}
-            >
-              {tab === 'timeline' ? (
-                <section className="dossier-section timeline-section">
-                  <h3 className="visually-hidden">Timeline</h3>
-                  {visibleMoments.length > 0 ? (
-                    <>
-                      <ol>{visibleMoments.map((moment) => {
-                        const rawObservations = moment.inputRecordIds.flatMap((id) => {
-                          const observation = observationsById.get(id)
-                          return observation ? [observation] : []
-                        })
-                        const evidence = uniqueBy(
-                          rawObservations.flatMap((observation) => observation.evidenceBlockIds.flatMap((id) => {
-                            const source = sourceBlocksById.get(id)
-                            return source ? [source] : []
-                          })),
-                          (source) => source.id,
-                        )
-                        return (
-                          <li key={moment.id}>
-                            <details className="timeline-moment">
-                              <summary>
-                                <span>¶{moment.sourceSequence}</span>
-                                <span>{moment.sentence}</span>
-                                <ChevronDown size={14} aria-hidden="true" />
-                              </summary>
-                              <div className="timeline-detail">
-                                {rawObservations.length > 1 && rawObservations.map((observation) => (
-                                  <p key={observation.id}>{observation.summary}</p>
-                                ))}
-                                {evidence.map((source) => (
-                                  <blockquote key={source.id}><p>{source.text}</p><cite>Paragraph {source.sourceSequence}</cite></blockquote>
-                                ))}
-                              </div>
-                            </details>
-                          </li>
-                        )
-                      })}</ol>
-                      {hiddenMomentCount > 0 && (
-                        <button type="button" className="timeline-more" onClick={() => setShowAllMoments((value) => !value)}>
-                          {showAllMoments ? 'Show essential moments' : `Show ${hiddenMomentCount} more moments`}
-                        </button>
-                      )}
-                    </>
-                  ) : <p className="empty-copy">No timeline moments yet.</p>}
-                </section>
-              ) : tab === 'story' ? (
-                <section className="dossier-section story-section">
-                  <h3 className="visually-hidden">Story so far</h3>
-                  {profile.storySoFar
-                    ? <p>{profile.storySoFar}</p>
-                    : <p className="empty-copy">There is no story to gather yet.</p>}
-                </section>
-              ) : (
-                <>
-                  <section className="dossier-section graph-section">
-                    <h3 className="visually-hidden">Connections through paragraph {currentSequence}</h3>
-                    <RelationshipGraph graph={graph} />
-                  </section>
-                  {profile.relationships.length > 0 && (
+            ) : (
+              <>
+                <div className="dossier-tabs" role="tablist" aria-label="Character context sections">
+                  <button id="dossier-tab-timeline" type="button" role="tab" aria-controls="dossier-panel-timeline" aria-selected={tab === 'timeline'} onClick={() => setTab('timeline')}>Timeline</button>
+                  <button id="dossier-tab-connections" type="button" role="tab" aria-controls="dossier-panel-connections" aria-selected={tab === 'connections'} onClick={() => setTab('connections')}>Connections</button>
+                </div>
+                <div
+                  className="dossier-scroll"
+                  id={panelId}
+                  role="tabpanel"
+                  aria-labelledby={tabId}
+                >
+                  {tab === 'timeline' ? (
+                    <section className="dossier-section timeline-section">
+                      <h3 className="visually-hidden">Timeline</h3>
+                      {visibleMoments.length > 0 ? (
+                        <>
+                          <ol>{visibleMoments.map((moment) => (
+                            <li key={moment.id}>{moment.sentence}</li>
+                          ))}</ol>
+                          {hiddenMomentCount > 0 && (
+                            <button type="button" className="timeline-more" onClick={() => setShowAllMoments((value) => !value)}>
+                              {showAllMoments ? 'Show essential moments' : `Show ${hiddenMomentCount} more moments`}
+                            </button>
+                          )}
+                        </>
+                      ) : <p className="empty-copy">No timeline moments yet.</p>}
+                    </section>
+                  ) : (
                     <section className="dossier-section connection-list">
-                      <h3>Connection details</h3>
-                      {profile.relationships.map((relationship) => (
-                        <div className="connection-row" key={relationship.id}>
-                          <div>{relationship.relatedName.slice(0, 1)}</div>
-                          <p><strong>{relationship.relatedName}</strong><span>{relationship.label}</span><small>{relationship.detail}</small></p>
-                          <em>¶{relationship.sourceSequence}</em>
-                        </div>
-                      ))}
+                      <h3 className="visually-hidden">Connections</h3>
+                      {profile.relationships.length > 0 ? profile.relationships.map((relationship) => (
+                        <button className="connection-row" type="button" key={relationship.id} onClick={() => selectConnection(relationship.relatedCharacterId)}>
+                          <span className="connection-copy"><strong>{relationship.relatedName}</strong><span>{relationship.label}</span><small>{relationship.detail}</small></span>
+                          <ArrowRight size={14} aria-hidden="true" />
+                        </button>
+                      )) : <p className="empty-copy">No connections yet.</p>}
                     </section>
                   )}
-                </>
-              )}
-            </div>
+                </div>
+              </>
+            )}
           </>
         )}
       </aside>
@@ -811,7 +743,14 @@ function ReaderScreen({ active, onLibrary }: { active: ActiveReader; onLibrary: 
         </div>
       )}
 
-      <CharacterDossier opened={opened} characterId={selectedCharacterId} currentSequence={currentSequence} open={dossierOpen} onClose={() => setDossierOpen(false)} />
+      <CharacterDossier
+        opened={opened}
+        characterId={selectedCharacterId}
+        currentSequence={currentSequence}
+        open={dossierOpen}
+        onClose={() => setDossierOpen(false)}
+        onSelectCharacter={setSelectedCharacterId}
+      />
     </div>
   )
 }
