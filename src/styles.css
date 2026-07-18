@@ -185,6 +185,7 @@ button { color: inherit; }
   color: var(--ink);
 }
 .landing-trials { display: flex; flex-direction: column; margin-top: clamp(94px, 13vh, 160px); padding: 0 0 46px; }
+.landing-instruction { max-width: 620px; margin: 0 0 22px; color: #656861; font-family: var(--serif); font-size: clamp(18px, 1.6vw, 22px); line-height: 1.35; }
 .trial-books { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .trial-book + .trial-book { border-left: 1px solid var(--line); }
 .trial-book button {

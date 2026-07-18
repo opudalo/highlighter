@@ -177,6 +177,7 @@ function LibraryScreen({
         )}
 
         <section className="landing-trials" aria-label="Trial books">
+          <p className="landing-instruction">Open a book, then click any underlined character name to see their story so far.</p>
           <div className="trial-books">
             {preparedBooks.map((book) => (
               <TrialBook

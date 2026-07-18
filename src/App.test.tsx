@@ -17,6 +17,7 @@ describe('SPOIL NOT landing page', () => {
     expect(screen.getByRole('heading', { name: /Ever read a book/i })).toBeInTheDocument()
     expect(screen.getByText('Yeah, me too.')).toBeInTheDocument()
     expect(screen.getByText(/page 10 and page 100/i)).toBeInTheDocument()
+    expect(screen.getByText(/click any underlined character name/i)).toBeInTheDocument()
     expect(screen.getAllByRole('article')).toHaveLength(3)
     expect(screen.getByRole('button', { name: 'Read Alice’s Adventures in Wonderland' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Read Frankenstein' })).toBeInTheDocument()

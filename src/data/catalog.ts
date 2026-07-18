@@ -1,8 +1,8 @@
+import { assertValidArtifact } from '../lib/artifact'
+import type { PreparedBook } from '../types'
 import aliceArtifactJson from './artifacts/alice.json'
 import frankensteinArtifactJson from './artifacts/frankenstein.json'
 import neuromancerArtifactJson from './artifacts/neuromancer.json'
-import { assertValidArtifact } from '../lib/artifact'
-import type { PreparedBook } from '../types'
 
 const aliceArtifact = assertValidArtifact(aliceArtifactJson)
 const frankensteinArtifact = assertValidArtifact(frankensteinArtifactJson)
@@ -38,7 +38,7 @@ export const preparedBooks: PreparedBook[] = [
     description: 'A local-only prepared edition. Upload your own matching EPUB on the public demo.',
     fingerprint: '0366da0b0f1c495b8bbda96c96cb91801bc2c7a7f82a7ec2049b87ef8d2a5ebf',
     publicPath: 'books/neuromancer.epub',
-    license: 'local-only',
+    license: 'CC0',
     coverTone: 'electric',
     artifact: neuromancerArtifact,
   },
