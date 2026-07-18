@@ -7,6 +7,10 @@ import {
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import aliceThumbnail from './assets/book-thumbnails/alice.png'
+import characterClickDemo from './assets/character-click.mp4'
+import frankensteinThumbnail from './assets/book-thumbnails/frankenstein.png'
+import neuromancerThumbnail from './assets/book-thumbnails/neuromancer.png'
 import { preparedBookByFingerprint, preparedBooks, publicBooks } from './data/catalog'
 import { assertValidArtifact } from './lib/artifact'
 import { blockBySequence, chapterForSequence, parseEpub } from './lib/epub'
@@ -30,6 +34,11 @@ import type {
 const IMPORT_TIMEOUT_MS = 30_000
 const SUPPORTED_IMPORT_DELAY_MS = 2_800
 const ESTIMATED_WORDS_PER_PAGE = 275
+const trialBookThumbnails: Record<string, string> = {
+  alice: aliceThumbnail,
+  frankenstein: frankensteinThumbnail,
+  neuromancer: neuromancerThumbnail,
+}
 
 type ImportState = {
   status: 'idle' | 'processing' | 'unsupported' | 'error'
@@ -109,19 +118,32 @@ function TrialBook({
 }) {
   const isLocalOnly = book.license === 'local-only'
   const canOpen = !isLocalOnly || import.meta.env.DEV || locallyStored
+  const thumbnail = trialBookThumbnails[book.id]
   return (
     <article className="trial-book">
       <button
+        className="trial-book-card"
         type="button"
         onClick={() => canOpen ? onOpen(book) : onUpload()}
         disabled={loading}
         aria-label={canOpen ? `Read ${book.title}` : `Upload your copy of ${book.title}`}
       >
-        <div>
+        {thumbnail && (
+          <img
+            className="trial-book-thumbnail"
+            src={thumbnail}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+          />
+        )}
+        <div className="trial-book-copy">
           <h2>{book.title}</h2>
           <p>{book.author}</p>
         </div>
-        <span>{loading ? 'Opening…' : canOpen ? 'Read' : 'Upload your copy'} <ArrowRight size={16} aria-hidden="true" /></span>
+        <span className="trial-book-action">
+          {loading ? 'Opening…' : canOpen ? 'Read it' : 'Upload your copy'} <ArrowRight size={16} aria-hidden="true" />
+        </span>
       </button>
     </article>
   )
@@ -177,7 +199,20 @@ function LibraryScreen({
         )}
 
         <section className="landing-trials" aria-label="Trial books">
-          <p className="landing-instruction">Open a book, then click any underlined character name to see their story so far.</p>
+          <div id="how-it-works" className="landing-guide">
+            <p className="landing-instruction">Open a book, then click any underlined character name to see their story so far.</p>
+            <video
+              className="landing-demo"
+              src={characterClickDemo}
+              aria-label="A character name is clicked, opening spoiler-safe context"
+              autoPlay
+              loop
+              muted
+              playsInline
+              preload="metadata"
+              disablePictureInPicture
+            />
+          </div>
           <div className="trial-books">
             {preparedBooks.map((book) => (
               <TrialBook

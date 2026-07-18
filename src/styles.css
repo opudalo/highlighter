@@ -185,30 +185,58 @@ button { color: inherit; }
   color: var(--ink);
 }
 .landing-trials { display: flex; flex-direction: column; margin-top: clamp(94px, 13vh, 160px); padding: 0 0 46px; }
+.landing-guide { margin-bottom: clamp(44px, 6vw, 76px); }
 .landing-instruction { max-width: 620px; margin: 0 0 22px; color: #656861; font-family: var(--serif); font-size: clamp(18px, 1.6vw, 22px); line-height: 1.35; }
+.landing-demo { width: 100%; display: block; aspect-ratio: 2864 / 1800; border: 1px solid var(--line); background: #f3f0e8; object-fit: cover; }
 .trial-books { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .trial-book + .trial-book { border-left: 1px solid var(--line); }
-.trial-book button {
+.trial-book {
+  min-width: 0;
+}
+.trial-book-card {
   width: 100%;
-  min-height: 244px;
+  height: 100%;
+  min-height: 500px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 44px;
-  padding: 34px 34px 30px;
+  align-items: center;
+  padding: 30px 30px 34px;
   border: 0;
+  color: inherit;
   background: transparent;
   cursor: pointer;
-  text-align: left;
+  font: inherit;
+  text-align: center;
   transition: background .16s;
 }
-.trial-book button:hover { background: rgba(255, 255, 255, .42); }
+.trial-book-card:hover { background: rgba(255, 255, 255, .42); }
+.trial-book-card:disabled { cursor: wait; opacity: .65; }
+.trial-book-copy { margin-top: 25px; }
 .trial-book h2 { margin: 0 0 12px; font-family: var(--serif); font-size: clamp(36px, 3.4vw, 48px); font-weight: 500; line-height: .98; letter-spacing: -.03em; }
 .trial-book p { margin: 0; color: #73766f; font-size: 12px; }
-.trial-book button > span { display: inline-flex; align-items: center; gap: 8px; color: var(--green-dark); font-size: 12px; }
-.trial-book button > span svg { transition: transform .16s; }
-.trial-book button:hover > span svg { transform: translateX(3px); }
+.trial-book-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding: 5px 0;
+  border-bottom: 1px solid currentColor;
+  color: var(--green-dark);
+  font-size: 11px;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+.trial-book-action svg { transition: transform .16s; }
+.trial-book-card:hover .trial-book-action svg { transform: translateX(3px); }
+.trial-book-thumbnail {
+  width: 100%;
+  height: 260px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 13px rgba(38, 41, 35, .13));
+  transition: transform .18s ease;
+  user-select: none;
+}
+.trial-book-card:hover .trial-book-thumbnail { transform: translateY(-3px) rotate(-1deg); }
 .landing-trials > .landing-import { margin-top: 28px; }
 .landing-message { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 13px; margin-top: 34px; padding: 15px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: #804a37; }
 .landing-message p { margin: 0; font-size: 11px; }
@@ -713,9 +741,10 @@ button { color: inherit; }
   .landing-trials { margin-top: 90px; padding: 0 0 34px; }
   .trial-books { grid-template-columns: 1fr; border-bottom: 0; }
   .trial-book + .trial-book { border-left: 0; border-top: 1px solid var(--line); }
-  .trial-book button { min-height: 174px; flex-direction: row; align-items: center; gap: 20px; padding: 26px 10px; }
-  .trial-book h2 { font-size: 34px; }
-  .trial-book button > span { flex: 0 0 auto; }
+  .trial-book-card { min-height: 0; padding: 34px 10px 40px; }
+  .trial-book-thumbnail { height: 280px; }
+  .trial-book-copy { margin-top: 24px; }
+  .trial-book h2 { font-size: 36px; }
   .landing-message { grid-template-columns: auto 1fr; }
   .landing-message button { grid-column: 2; justify-self: start; }
   .library-topbar { height: 62px; padding: 0 18px; }

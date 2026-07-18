@@ -38,7 +38,7 @@ export const preparedBooks: PreparedBook[] = [
     description: 'A local-only prepared edition. Upload your own matching EPUB on the public demo.',
     fingerprint: '0366da0b0f1c495b8bbda96c96cb91801bc2c7a7f82a7ec2049b87ef8d2a5ebf',
     publicPath: 'books/neuromancer.epub',
-    license: 'CC0',
+    license: 'local-only',
     coverTone: 'electric',
     artifact: neuromancerArtifact,
   },

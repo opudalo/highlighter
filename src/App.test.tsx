@@ -18,10 +18,12 @@ describe('SPOIL NOT landing page', () => {
     expect(screen.getByText('Yeah, me too.')).toBeInTheDocument()
     expect(screen.getByText(/page 10 and page 100/i)).toBeInTheDocument()
     expect(screen.getByText(/click any underlined character name/i)).toBeInTheDocument()
+    expect(screen.getByLabelText('A character name is clicked, opening spoiler-safe context')).toBeInTheDocument()
     expect(screen.getAllByRole('article')).toHaveLength(3)
     expect(screen.getByRole('button', { name: 'Read Alice’s Adventures in Wonderland' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Read Frankenstein' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Open an EPUB' })).toBeInTheDocument()
+    expect(document.querySelectorAll('.trial-book-thumbnail')).toHaveLength(3)
   })
 
   it('waits 30 seconds before offering prepared books for an unknown EPUB', async () => {
