@@ -8,12 +8,12 @@ import {
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import aliceThumbnail from './assets/book-thumbnails/alice.png'
-import characterClickDemo from './assets/character-click.mp4'
 import frankensteinThumbnail from './assets/book-thumbnails/frankenstein.png'
 import neuromancerThumbnail from './assets/book-thumbnails/neuromancer.png'
-import { preparedBookByFingerprint, preparedBooks, publicBooks } from './data/catalog'
+import characterClickDemo from './assets/character-click.mp4'
+import { preparedBookByFingerprint, preparedBooks } from './data/catalog'
 import { assertValidArtifact } from './lib/artifact'
-import { blockBySequence, chapterForSequence, parseEpub } from './lib/epub'
+import { chapterForSequence, parseEpub } from './lib/epub'
 import { loadBundledBook, loadUploadedBook, type OpenedBook } from './lib/importBook'
 import {
   getImportedBook,

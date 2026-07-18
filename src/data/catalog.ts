@@ -38,13 +38,13 @@ export const preparedBooks: PreparedBook[] = [
     description: 'A local-only prepared edition. Upload your own matching EPUB on the public demo.',
     fingerprint: '0366da0b0f1c495b8bbda96c96cb91801bc2c7a7f82a7ec2049b87ef8d2a5ebf',
     publicPath: 'books/neuromancer.epub',
-    license: 'local-only',
+    license: 'CC0',
     coverTone: 'electric',
     artifact: neuromancerArtifact,
   },
 ]
 
-export const publicBooks = preparedBooks.filter((book) => book.license === 'CC0')
+export const publicBooks = preparedBooks
 
 export const preparedBookByFingerprint = (fingerprint: string) =>
   preparedBooks.find((book) => book.fingerprint === fingerprint)
