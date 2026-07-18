@@ -14,6 +14,7 @@ afterEach(() => {
 describe('SPOIL NOT landing page', () => {
   it('briefly explains the product and offers three trial books', () => {
     render(<App />)
+    expect(screen.getByRole('img', { name: 'SPOIL NOT' })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /Ever read a book/i })).toBeInTheDocument()
     expect(screen.getByText('Yeah, me too.')).toBeInTheDocument()
     expect(screen.getByText(/page 10 and page 100/i)).toBeInTheDocument()

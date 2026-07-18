@@ -11,6 +11,7 @@ import aliceThumbnail from './assets/book-thumbnails/alice.png'
 import frankensteinThumbnail from './assets/book-thumbnails/frankenstein.png'
 import neuromancerThumbnail from './assets/book-thumbnails/neuromancer.png'
 import characterClickDemo from './assets/character-click.mp4'
+import landingLogo from './assets/spoil-not-logo.png'
 import { preparedBookByFingerprint, preparedBooks } from './data/catalog'
 import { assertValidArtifact } from './lib/artifact'
 import { chapterForSequence, parseEpub } from './lib/epub'
@@ -182,7 +183,7 @@ function LibraryScreen({
       }}
     >
       <main className="landing-main">
-        <div className="landing-logo"><Brand /></div>
+        <div className="landing-logo"><img src={landingLogo} alt="SPOIL NOT" /></div>
 
         <section className="landing-intro" aria-label="What SPOIL NOT does">
           <h1>Ever read a book, looked up a character online and spoiled the ending?</h1>

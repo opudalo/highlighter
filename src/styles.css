@@ -137,14 +137,9 @@ button { color: inherit; }
 .landing-logo {
   display: flex;
   justify-content: center;
-  padding: 30px 0 clamp(76px, 10vh, 126px);
+  padding: 24px 0 clamp(62px, 8vh, 100px);
 }
-.landing-logo .brand {
-  font-family: var(--sans);
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: .14em;
-}
+.landing-logo img { width: clamp(148px, 13vw, 180px); height: auto; display: block; }
 .landing-import {
   align-self: center;
   padding: 5px 0;
@@ -734,8 +729,8 @@ button { color: inherit; }
 
 @media (max-width: 740px) {
   .landing-main { padding: 0 20px; }
-  .landing-logo { padding: 25px 0 74px; }
-  .landing-logo .brand { font-size: 14px; }
+  .landing-logo { padding: 22px 0 62px; }
+  .landing-logo img { width: 126px; }
   .landing-intro h1,
   .landing-intro p { font-size: clamp(42px, 12.2vw, 54px); line-height: .98; }
   .landing-trials { margin-top: 90px; padding: 0 0 34px; }
