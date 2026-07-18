@@ -408,20 +408,23 @@ function CharacterDossier({
               </div>
               <button ref={closeRef} type="button" className="dossier-close" onClick={closeAndRestoreFocus} aria-label="Close character context"><X size={17} /></button>
             </div>
-            <p className="profile-summary">
-              {profile.summary}
-              {hasFullContext && (
-                <> <button type="button" onClick={() => setShowFullContext((value) => !value)}>{showFullContext ? 'Back to summary' : 'Read full context'}</button></>
-              )}
-            </p>
             {showFullContext ? (
               <div className="dossier-scroll full-context-scroll">
                 <section className="dossier-section full-context-section">
-                  <p>{profile.storySoFar}</p>
+                  <p>
+                    {profile.storySoFar}{' '}
+                    <button type="button" onClick={() => setShowFullContext(false)}>Read short summary</button>
+                  </p>
                 </section>
               </div>
             ) : (
               <>
+                <p className="profile-summary">
+                  {profile.summary}
+                  {hasFullContext && (
+                    <> <button type="button" onClick={() => setShowFullContext(true)}>Read full context</button></>
+                  )}
+                </p>
                 <div className="dossier-tabs" role="tablist" aria-label="Character context sections">
                   <button id="dossier-tab-timeline" type="button" role="tab" aria-controls="dossier-panel-timeline" aria-selected={tab === 'timeline'} onClick={() => setTab('timeline')}>Timeline</button>
                   <button id="dossier-tab-connections" type="button" role="tab" aria-controls="dossier-panel-connections" aria-selected={tab === 'connections'} onClick={() => setTab('connections')}>Connections</button>

@@ -111,8 +111,11 @@ describe('SPOIL NOT reader', () => {
     await user.click(within(dossier).getByRole('button', { name: 'Read full context' }))
     const fullContext = dossier.querySelector<HTMLElement>('.full-context-section')!
     expect(within(fullContext).getByText(/Alice sees little value in books without pictures/i)).toBeInTheDocument()
+    expect(dossier.querySelector('.profile-summary')).not.toBeInTheDocument()
     expect(within(dossier).queryByRole('tab', { name: 'Timeline' })).not.toBeInTheDocument()
-    await user.click(within(dossier).getByRole('button', { name: 'Back to summary' }))
+    await user.click(within(dossier).getByRole('button', { name: 'Read short summary' }))
+    expect(dossier.querySelector('.profile-summary')).toBeInTheDocument()
+    expect(dossier.querySelector('.full-context-section')).not.toBeInTheDocument()
 
     await user.click(within(dossier).getByRole('tab', { name: 'Connections' }))
     const whiteRabbit = within(dossier).getByRole('button', { name: /White Rabbit/i })
